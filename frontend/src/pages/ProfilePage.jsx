@@ -16,11 +16,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import pb from '@/lib/pocketbaseClient';
+import { getAnalytics } from '@/lib/historyStorage';
 
 const ProfilePage = () => {
   const { currentUser, logout } = useAuth();
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const analytics = getAnalytics();
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -102,7 +104,7 @@ const ProfilePage = () => {
                   className="card-glass bg-gradient-to-br from-lavender/20 to-pastel-purple/10 p-6 rounded-2xl border border-lavender/20 text-center"
                 >
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Avg Score</p>
-                  <p className="text-3xl font-extrabold text-gradient">88</p>
+                  <p className="text-3xl font-extrabold text-gradient">{analytics.avgScore}</p>
                 </motion.div>
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
@@ -112,7 +114,7 @@ const ProfilePage = () => {
                   className="card-glass bg-gradient-to-br from-pastel-blue/20 to-soft-lilac/10 p-6 rounded-2xl border border-pastel-blue/20 text-center"
                 >
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Top Lang</p>
-                  <p className="text-3xl font-extrabold text-gradient">JS</p>
+                  <p className="text-3xl font-extrabold text-gradient">{analytics.topLanguage.toUpperCase()}</p>
                 </motion.div>
               </div>
 

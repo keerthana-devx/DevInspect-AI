@@ -1,99 +1,119 @@
-const STORAGE_KEY = 'devinspect_history';
+const STORAGE_KEY = "devinspect-history";
 
-/**
- * Save a code review to localStorage
- * @param {Object} reviewData - The review data to save
- * @param {string} reviewData.code - The analyzed code
- * @param {string} reviewData.language - Programming language
- * @param {string} reviewData.mode - Analysis mode (student/interviewer/developer)
- * @param {number} reviewData.aiScore - AI quality score
- * @param {Array} reviewData.issues - Array of identified issues
- * @param {Array} reviewData.suggestions - Array of suggestions
- * @returns {string} - The ID of the saved review
- */
-export const saveReview = (reviewData) => {
-  try {
-    const reviews = getReviews();
-    const newReview = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      ...reviewData
-    };
-    
-    reviews.unshift(newReview); // Add to beginning of array
-    
-    // Keep only last 100 reviews to prevent storage overflow
-    if (reviews.length > 100) {
-      reviews.pop();
-    }
-    
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));
-    return newReview.id;
-  } catch (error) {
-    console.error('Error saving review to localStorage:', error);
-    throw new Error('Failed to save review');
-  }
+export const normalizeMode = (mode) => {
+  const lower = String(mode || "developer").toLowerCase();
+  if (lower.includes("student")) return "student";
+  if (lower.includes("interview")) return "interviewer";
+  if (lower.includes("developer")) return "developer";
+  return lower;
 };
 
-/**
- * Get all reviews from localStorage
- * @returns {Array} - Array of review objects
- */
+export const computeAiScore = (errors = []) => {
+  const count = Array.isArray(errors) ? errors.length : 0;
+  return Math.max(0, Math.min(100, 100 - count * 12));
+};
+
 export const getReviews = () => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    
-    const reviews = JSON.parse(stored);
-    return Array.isArray(reviews) ? reviews : [];
+    const data = localStorage.getItem(STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('Error reading reviews from localStorage:', error);
+    console.error(error);
     return [];
   }
 };
 
-/**
- * Delete a specific review by ID
- * @param {string} id - The ID of the review to delete
- * @returns {boolean} - True if deleted successfully
- */
+export const saveReview = (review) => {
+  try {
+    const existing = getReviews();
+    const errors = review.errors || [];
+    const mode = normalizeMode(review.mode);
+
+    const newReview = {
+      id: Date.now(),
+      timestamp: review.timestamp || new Date().toISOString(),
+      language: review.language || "javascript",
+      mode,
+      input: review.input || "",
+      prompt: review.prompt || "",
+      correctedCode: review.correctedCode || "",
+      explanation: review.explanation || "",
+      modeOutput: review.modeOutput || "",
+      errors,
+      issues: errors,
+      aiScore: computeAiScore(errors),
+    };
+
+    existing.unshift(newReview);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+    return newReview;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
 export const deleteReview = (id) => {
   try {
-    const reviews = getReviews();
-    const filteredReviews = reviews.filter(review => review.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredReviews));
+    const existing = getReviews();
+    const filtered = existing.filter((item) => item.id !== id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
     return true;
   } catch (error) {
-    console.error('Error deleting review from localStorage:', error);
+    console.error(error);
     return false;
   }
 };
 
-/**
- * Clear all reviews from localStorage
- * @returns {boolean} - True if cleared successfully
- */
 export const clearAllReviews = () => {
   try {
     localStorage.removeItem(STORAGE_KEY);
     return true;
   } catch (error) {
-    console.error('Error clearing reviews from localStorage:', error);
+    console.error(error);
     return false;
   }
 };
 
-/**
- * Get a specific review by ID
- * @param {string} id - The ID of the review to retrieve
- * @returns {Object|null} - The review object or null if not found
- */
-export const getReviewById = (id) => {
-  try {
-    const reviews = getReviews();
-    return reviews.find(review => review.id === id) || null;
-  } catch (error) {
-    console.error('Error getting review by ID:', error);
-    return null;
-  }
+export const getAnalytics = () => {
+  const reviews = getReviews();
+  const modeCounts = { student: 0, interviewer: 0, developer: 0 };
+
+  reviews.forEach((review) => {
+    const mode = normalizeMode(review.mode);
+    if (modeCounts[mode] !== undefined) {
+      modeCounts[mode] += 1;
+    }
+  });
+
+  const totalIssues = reviews.reduce(
+    (sum, review) => sum + (review.errors?.length || 0),
+    0
+  );
+
+  const avgScore = reviews.length
+    ? Math.round(
+        reviews.reduce((sum, review) => sum + (review.aiScore || 0), 0) /
+          reviews.length
+      )
+    : 0;
+
+  const languageCounts = reviews.reduce((acc, review) => {
+    const lang = (review.language || "unknown").toLowerCase();
+    acc[lang] = (acc[lang] || 0) + 1;
+    return acc;
+  }, {});
+
+  const topLanguage =
+    Object.entries(languageCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ||
+    "—";
+
+  return {
+    totalAnalyses: reviews.length,
+    modeCounts,
+    recentActivity: reviews.slice(0, 6),
+    totalIssues,
+    avgScore,
+    topLanguage,
+  };
 };

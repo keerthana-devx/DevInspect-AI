@@ -1,57 +1,94 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 import { motion } from "framer-motion";
 import {
   Activity,
   Bug,
   Code2,
-  Shield,
   Sparkles,
   TrendingUp,
-  ArrowUp,
-  ArrowDown,
 } from "lucide-react";
+import { Pie } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { getAnalytics } from "@/lib/historyStorage";
 
-const stats = [
-  {
-    title: "Total Reviews",
-    value: "128",
-    icon: Code2,
-    change: "+12%",
-    trend: "up",
-    color: "baby-pink",
-    gradient: "from-baby-pink/20 to-blush-pink/10"
-  },
-  {
-    title: "Critical Bugs",
-    value: "14",
-    icon: Bug,
-    change: "-5%",
-    trend: "down",
-    color: "lavender",
-    gradient: "from-lavender/20 to-pastel-purple/10"
-  },
-  {
-    title: "Security Checks",
-    value: "42",
-    icon: Shield,
-    change: "+8%",
-    trend: "up",
-    color: "pastel-blue",
-    gradient: "from-pastel-blue/20 to-soft-lilac/10"
-  },
-  {
-    title: "AI Score",
-    value: "94%",
-    icon: TrendingUp,
-    change: "+3%",
-    trend: "up",
-    color: "soft-peach",
-    gradient: "from-soft-peach/20 to-warm-beige/10"
-  },
-];
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 const DashboardPage = () => {
+  const [analytics, setAnalytics] = useState(() => getAnalytics());
+
+  useEffect(() => {
+    setAnalytics(getAnalytics());
+  }, []);
+
+  const stats = useMemo(
+    () => [
+      {
+        title: "Total Analyses",
+        value: String(analytics.totalAnalyses),
+        icon: Code2,
+        color: "baby-pink",
+      },
+      {
+        title: "Total Issues",
+        value: String(analytics.totalIssues),
+        icon: Bug,
+        color: "lavender",
+      },
+      {
+        title: "Avg AI Score",
+        value: `${analytics.avgScore}%`,
+        icon: TrendingUp,
+        color: "pastel-blue",
+      },
+      {
+        title: "Top Language",
+        value: analytics.topLanguage.toUpperCase(),
+        icon: Sparkles,
+        color: "soft-peach",
+      },
+    ],
+    [analytics]
+  );
+
+  const pieData = useMemo(
+    () => ({
+      labels: ["Student", "Interviewer", "Developer"],
+      datasets: [
+        {
+          data: [
+            analytics.modeCounts.student,
+            analytics.modeCounts.interviewer,
+            analytics.modeCounts.developer,
+          ],
+          backgroundColor: [
+            "hsl(var(--primary))",
+            "hsl(var(--secondary))",
+            "hsl(var(--accent))",
+          ],
+          borderWidth: 0,
+        },
+      ],
+    }),
+    [analytics.modeCounts]
+  );
+
+  const formatRelativeTime = (timestamp) => {
+    const diff = Date.now() - new Date(timestamp).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days > 1 ? "s" : ""} ago`;
+  };
+
   return (
     <>
       <Helmet>
@@ -65,27 +102,24 @@ const DashboardPage = () => {
           className="mb-10"
         >
           <div className="flex items-center gap-3 mb-3">
-            <motion.div 
+            <motion.div
               whileHover={{ rotate: 15, scale: 1.1 }}
               className="w-12 h-12 rounded-2xl gradient-brand flex items-center justify-center shadow-lg shadow-primary/20"
             >
               <Sparkles className="text-white w-6 h-6 animate-pulse" />
             </motion.div>
-
             <h1 className="text-4xl font-extrabold text-gradient">
               DevInspect Dashboard
             </h1>
           </div>
-
           <p className="text-muted-foreground text-lg">
-            AI-powered analytics and code review insights.
+            Analytics from your saved code analyses.
           </p>
         </motion.div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
           {stats.map((item, index) => {
             const Icon = item.icon;
-
             return (
               <motion.div
                 key={item.title}
@@ -95,21 +129,13 @@ const DashboardPage = () => {
                 whileHover={{ scale: 1.05, y: -5 }}
                 className="card-glow bg-gradient-to-br from-white/40 to-white/20 backdrop-blur-xl border border-white/50 p-6 rounded-2xl"
               >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-white/60 to-white/30 backdrop-blur-sm border border-white/40 flex items-center justify-center shadow-lg">
-                    <Icon className={`text-${item.color} w-7 h-7`} />
-                  </div>
-                  <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${item.trend === 'up' ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive'}`}>
-                    {item.trend === 'up' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                    {item.change}
-                  </div>
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-white/60 to-white/30 backdrop-blur-sm border border-white/40 flex items-center justify-center shadow-lg mb-4">
+                  <Icon className={`text-${item.color} w-7 h-7`} />
                 </div>
                 <p className="text-muted-foreground text-sm font-medium mb-1">
                   {item.title}
                 </p>
-                <h2 className="text-4xl font-bold text-gradient">
-                  {item.value}
-                </h2>
+                <h2 className="text-4xl font-bold text-gradient">{item.value}</h2>
               </motion.div>
             );
           })}
@@ -126,30 +152,30 @@ const DashboardPage = () => {
               <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20">
                 <Activity className="text-primary w-6 h-6" />
               </div>
-              <h2 className="text-2xl font-bold text-gradient">
-                Recent Activity
-              </h2>
+              <h2 className="text-2xl font-bold text-gradient">Recent Activity</h2>
             </div>
 
             <div className="space-y-3">
-              {[
-                { text: "JavaScript security analysis completed", time: "2 min ago", color: "baby-pink" },
-                { text: "React performance review generated", time: "15 min ago", color: "lavender" },
-                { text: "Python bug detection finished", time: "1 hour ago", color: "pastel-blue" },
-                { text: "DSA optimization suggestions added", time: "2 hours ago", color: "soft-peach" },
-              ].map((item, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5 + i * 0.1 }}
-                  whileHover={{ x: 5 }}
-                  className={`p-4 rounded-xl bg-gradient-to-r ${item.gradient} border border-${item.color}/20 flex items-center justify-between cursor-pointer transition-all`}
-                >
-                  <span className="text-foreground font-medium">{item.text}</span>
-                  <span className="text-xs text-muted-foreground">{item.time}</span>
-                </motion.div>
-              ))}
+              {analytics.recentActivity.length === 0 ? (
+                <p className="text-muted-foreground">
+                  Run your first analysis to see activity here.
+                </p>
+              ) : (
+                analytics.recentActivity.map((item) => (
+                  <motion.div
+                    key={item.id}
+                    whileHover={{ x: 5 }}
+                    className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20 flex items-center justify-between"
+                  >
+                    <span className="text-foreground font-medium capitalize">
+                      {item.language} · {item.mode} analysis
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatRelativeTime(item.timestamp)}
+                    </span>
+                  </motion.div>
+                ))
+              )}
             </div>
           </motion.div>
 
@@ -159,82 +185,16 @@ const DashboardPage = () => {
             transition={{ delay: 0.5 }}
             className="card-glass p-8 rounded-3xl"
           >
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20">
-                <Sparkles className="text-primary w-6 h-6" />
+            <h2 className="text-2xl font-bold text-gradient mb-6">
+              Mode Usage
+            </h2>
+            {analytics.totalAnalyses === 0 ? (
+              <p className="text-muted-foreground">No mode data yet.</p>
+            ) : (
+              <div className="max-w-xs mx-auto">
+                <Pie data={pieData} />
               </div>
-              <h2 className="text-2xl font-bold text-gradient">
-                AI Insights
-              </h2>
-            </div>
-
-            <div className="space-y-4">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.6 }}
-                whileHover={{ scale: 1.02 }}
-                className="p-5 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-primary/20">
-                    <TrendingUp className="text-primary w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold mb-2 text-foreground">
-                      Code Quality Improved
-                    </h3>
-                    <p className="text-muted-foreground text-sm">
-                      Your recent submissions show a 21% increase in clean architecture practices.
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.7 }}
-                whileHover={{ scale: 1.02 }}
-                className="p-5 rounded-2xl bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-secondary/20">
-                    <Shield className="text-secondary w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold mb-2 text-foreground">
-                      Performance Suggestion
-                    </h3>
-                    <p className="text-muted-foreground text-sm">
-                      Consider reducing nested loops in your DSA implementations.
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.8 }}
-                whileHover={{ scale: 1.02 }}
-                className="p-5 rounded-2xl bg-gradient-to-br from-accent/10 to-accent/5 border border-accent/20"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-accent/20">
-                    <Bug className="text-accent w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold mb-2 text-foreground">
-                      Security Alert
-                    </h3>
-                    <p className="text-muted-foreground text-sm">
-                      2 projects contain exposed environment variables.
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
+            )}
           </motion.div>
         </div>
       </div>

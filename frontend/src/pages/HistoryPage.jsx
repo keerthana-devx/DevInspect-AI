@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getReviews, deleteReview, clearAllReviews } from '@/lib/historyStorage';
+import { getReviews, deleteReview, clearAllReviews, normalizeMode } from '@/lib/historyStorage';
+import ReviewDetailModal from '@/components/ReviewDetailModel.jsx';
 import { toast } from 'sonner';
 
 const HistoryPage = () => {
@@ -18,7 +19,9 @@ const HistoryPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState('all');
-  const [viewType, setViewType] = useState('table'); // table or grid
+  const [viewType, setViewType] = useState('table');
+  const [selectedReview, setSelectedReview] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -35,8 +38,13 @@ const HistoryPage = () => {
   }, []);
 
   const filteredReviews = reviews.filter(r => {
-    const matchSearch = r.language.toLowerCase().includes(search.toLowerCase());
-    const matchMode = filterMode === 'all' || r.mode === filterMode;
+    const matchSearch =
+  (r?.language || "")
+    .toLowerCase()
+    .includes(
+      search.toLowerCase()
+    );
+    const matchMode = filterMode === 'all' || normalizeMode(r.mode) === filterMode;
     return matchSearch && matchMode;
   });
 
@@ -56,6 +64,11 @@ const HistoryPage = () => {
     } else {
       toast.error('Failed to clear reviews');
     }
+  };
+
+  const openReview = (review) => {
+    setSelectedReview(review);
+    setDetailOpen(true);
   };
 
   const getSeverityBadge = (sev) => {
@@ -160,7 +173,7 @@ const HistoryPage = () => {
                         <TableCell>{r.issues?.length || 0}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">
-                            <Button variant="outline" size="sm" className="font-semibold rounded-xl border-border/50 hover:bg-muted/50">View</Button>
+                            <Button variant="outline" size="sm" className="font-semibold rounded-xl border-border/50 hover:bg-muted/50" onClick={() => openReview(r)}>View</Button>
                             <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)} className="h-8 w-8 rounded-lg hover:bg-destructive/10 hover:text-destructive">
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -199,7 +212,7 @@ const HistoryPage = () => {
                     </div>
                   </div>
                   <div className="flex gap-2 mt-2">
-                    <Button variant="secondary" className="flex-1 btn-secondary rounded-xl font-semibold">View</Button>
+                    <Button variant="secondary" className="flex-1 btn-secondary rounded-xl font-semibold" onClick={() => openReview(r)}>View</Button>
                     <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)} className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive">
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -210,6 +223,12 @@ const HistoryPage = () => {
           )}
         </div>
       </div>
+
+      <ReviewDetailModal
+        review={selectedReview}
+        isOpen={detailOpen}
+        onClose={() => setDetailOpen(false)}
+      />
     </>
   );
 };

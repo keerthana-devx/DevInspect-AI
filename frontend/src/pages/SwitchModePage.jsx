@@ -5,6 +5,7 @@ import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import { GraduationCap, Users, Code2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
+import { normalizeMode } from '@/lib/historyStorage';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import {
@@ -56,7 +57,7 @@ const SwitchModePage = () => {
   ];
 
   const handleSelect = (id) => {
-    if (id === currentMode) {
+    if (normalizeMode(id) === normalizeMode(currentMode)) {
       toast.info('You are already in this mode.');
       return;
     }
@@ -91,7 +92,7 @@ const SwitchModePage = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {modes.map((mode, index) => {
               const Icon = mode.icon;
-              const isActive = currentMode === mode.id;
+              const isActive = normalizeMode(currentMode) === mode.id;
 
               return (
                 <motion.div

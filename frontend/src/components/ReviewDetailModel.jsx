@@ -1,40 +1,26 @@
-import React from 'react';
-import { X } from 'lucide-react';
+﻿import React from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const ReviewDetailModal = ({ review, isOpen, onClose }) => {
   if (!review) return null;
 
-  const getSeverityColor = (severity) => {
-    switch (severity?.toLowerCase()) {
-      case 'critical':
-        return 'bg-destructive text-destructive-foreground';
-      case 'high':
-        return 'bg-secondary text-secondary-foreground';
-      case 'medium':
-        return 'bg-primary text-primary-foreground';
-      case 'low':
-        return 'bg-accent text-accent-foreground';
-      default:
-        return 'bg-muted text-muted-foreground';
-    }
-  };
+  const errors = review.errors || review.issues || [];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <span>Code Review Details</span>
-            <Badge className={getSeverityColor(review.severity)}>
-              {review.severity || 'N/A'}
+          <DialogTitle className="flex items-center justify-between gap-4">
+            <span>Analysis Details</span>
+            <Badge variant="secondary" className="capitalize">
+              {review.mode}
             </Badge>
           </DialogTitle>
         </DialogHeader>
@@ -44,54 +30,62 @@ const ReviewDetailModal = ({ review, isOpen, onClose }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Language</p>
-                <p className="font-medium">{review.language}</p>
+                <p className="font-medium capitalize">{review.language}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Mode</p>
-                <p className="font-medium capitalize">{review.mode}</p>
+                <p className="text-sm text-muted-foreground">Date</p>
+                <p className="font-medium">
+                  {new Date(review.timestamp).toLocaleString()}
+                </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Issues Found</p>
-                <p className="font-medium">{review.issuesCount || 0}</p>
+                <p className="text-sm text-muted-foreground">AI Score</p>
+                <p className="font-medium">{review.aiScore ?? 0}/100</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Quality Score</p>
-                <p className="font-medium">{review.qualityScore || 'N/A'}/100</p>
+                <p className="text-sm text-muted-foreground">Issues</p>
+                <p className="font-medium">{errors.length}</p>
               </div>
             </div>
 
-            <div>
-              <h3 className="font-semibold mb-2">Code</h3>
-              <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm">
-                <code>{review.code}</code>
+<div>
+                <h3 className="font-semibold mb-2">Input Code</h3>
+              <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
+                <code>{review.input}</code>
               </pre>
             </div>
 
-            {review.results && (
-              <div>
-                <h3 className="font-semibold mb-2">Analysis Results</h3>
-                <div className="bg-muted p-4 rounded-lg space-y-3">
-                  {Array.isArray(review.results) ? (
-                    review.results.map((result, index) => (
-                      <div key={index} className="border-b border-border last:border-0 pb-3 last:pb-0">
-                        <p className="font-medium">{result.title || `Issue ${index + 1}`}</p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {result.description || result.message || 'No description available'}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm">{JSON.stringify(review.results, null, 2)}</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Created: {new Date(review.created).toLocaleString()}
-              </p>
+<div>
+                <h3 className="font-semibold mb-2">Corrected Code</h3>
+              <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
+                <code>{review.correctedCode}</code>
+              </pre>
             </div>
+
+<div>
+                <h3 className="font-semibold mb-2">Explanation</h3>
+              <p className="text-sm whitespace-pre-wrap">{review.explanation}</p>
+            </div>
+
+            {review.modeOutput ? (
+              <div>
+                <h3 className="font-semibold mb-2">Mode Output</h3>
+                <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
+                  {review.modeOutput}
+                </pre>
+              </div>
+            ) : null}
+
+            {errors.length > 0 ? (
+              <div>
+                <h3 className="font-semibold mb-2">Issues</h3>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  {errors.map((err, index) => (
+                    <li key={index}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         </ScrollArea>
       </DialogContent>
