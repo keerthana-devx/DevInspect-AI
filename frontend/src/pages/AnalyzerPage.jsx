@@ -1,269 +1,210 @@
-import React, { useState } from "react";
-import { Helmet } from "react-helmet";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect } from 'react';
+import { Helmet } from 'react-helmet';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Play,
+  Trash2,
+  Download,
+  Copy,
+  FileJson,
+} from 'lucide-react';
 
-import { useAuth } from "@/contexts/AuthContext.jsx";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
+import {
+  downloadTextFile,
+  copyToClipboard,
+  getCodeExtension,
+} from '../lib/downloadFile';
+
+import { useAuth } from '../contexts/AuthContext.jsx';
+
+import { Button } from '../components/ui/button';
+import { Textarea } from '../components/ui/textarea';
+import { Input } from '../components/ui/input';
+
+import { toast } from 'sonner';
+
+import {
+  saveReview,
+  getReviews,
+  deleteReview,
+  clearAllReviews,
+  normalizeMode,
+} from '../lib/historyStorage';
+
+import { analyzeCode, AiServiceError } from '../lib/aiService';
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
 
 const AnalyzerPage = () => {
   const { currentMode, currentUser } = useAuth();
 
   const username =
-    currentUser?.name || currentUser?.email || "Guest User";
+    currentUser?.name ||
+    currentUser?.email ||
+    'Guest User';
 
-  const [code, setCode] = useState("");
-  const [language, setLanguage] = useState("");
-  const [prompt, setPrompt] = useState("");
+  /* =========================
+      STATES
+  ========================= */
+
+  const [code, setCode] = useState('');
+  const [language, setLanguage] = useState('javascript');
+  const [analysisMode, setAnalysisMode] = useState('student');
+  const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [history, setHistory] = useState([]);
+
+  /* =========================
+      LOAD HISTORY
+  ========================= */
+
+  useEffect(() => {
+    try {
+      setHistory(getReviews());
+    } catch (error) {
+      console.error(error);
+      setHistory([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (currentMode) {
+      setAnalysisMode(normalizeMode(currentMode));
+    }
+  }, [currentMode]);
 
   /* =========================
       RUN ANALYSIS
-  ========================== */
+  ========================= */
+
   const handleRun = async () => {
-    if (!code.trim()) return alert("Enter code");
-    if (!language.trim()) return alert("Enter language");
+    if (!code.trim()) {
+      toast.error('Please paste code');
+      return;
+    }
 
     setLoading(true);
     setResult(null);
 
-    await new Promise((r) => setTimeout(r, 600));
+    try {
+      const mode = normalizeMode(analysisMode);
 
-    const output = aiEngine(code, language, prompt, currentMode);
+      const response = await analyzeCode({ code, mode });
 
-    setResult(output);
-    setLoading(false);
-  };
-
-  /* =========================
-      🧠 AI ENGINE (UPGRADED)
-  ========================== */
-  const aiEngine = (code, lang, prompt, mode) => {
-    const lower = code.toLowerCase();
-
-    let issues = [];
-
-    if (lower.includes("var ")) {
-      issues.push("Avoid using var, use let/const");
-    }
-
-    if (lower.includes("console.log") && !code.includes(";")) {
-      issues.push("Missing semicolon in console.log");
-    }
-
-    if (lower.includes("for") && !lower.includes("let")) {
-      issues.push("Loop variable not declared properly");
-    }
-
-    const isCorrect = issues.length === 0;
-
-    const fixedCode = code
-      .replace(/var /g, "let ")
-      .replace(/console\.log\((.*?)\)/g, "console.log($1);");
-
-    /* =========================
-        🎓 STUDENT MODE
-    ========================== */
-    if (mode === "student") {
-      return {
-        mode: "Student Mode",
-        status: isCorrect ? "Correct Code ✅" : "Mistakes Found ❌",
-
-        problems: issues.length
-          ? issues
-          : ["No mistakes found"],
-
-        correctedCode: isCorrect ? code : fixedCode,
-
-        explanation: isCorrect
-          ? "Your code is correct 👍 Keep practicing!"
-          : "Fix the mistakes shown above and understand basics like syntax, loops, and variables.",
+      const payload = {
+        input: code,
+        language,
+        prompt,
+        mode,
+        correctedCode: response?.correctedCode || '// No output',
+        explanation: response?.explanation || 'No explanation',
+        modeOutput: response?.modeOutput || '',
+        errors: response?.errors || [],
+        timestamp: new Date().toISOString(),
       };
+
+      setResult(payload);
+      saveReview(payload);
+      setHistory(getReviews());
+
+      if (response?.degraded) {
+        toast.warning('Offline mode used (AI unavailable)');
+      } else {
+        toast.success('Analysis completed');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(error?.message || 'AI analysis failed');
+      setResult(null);
+    } finally {
+      setLoading(false);
     }
-
-    /* =========================
-        🧑‍💻 DEVELOPER MODE
-    ========================== */
-    if (mode === "developer") {
-      return {
-        mode: "Developer Mode",
-        status: isCorrect ? "Clean Code ✅" : "Needs Improvement ⚠️",
-
-        problems: issues,
-
-        correctedCode: fixedCode,
-
-        explanation:
-          "This code review focuses on production-level quality, clean structure, and best practices used in real companies.",
-
-        suggestions: [
-          "Use const/let properly",
-          "Avoid global variables",
-          "Write reusable functions",
-          "Follow clean code standards",
-        ],
-      };
-    }
-
-    /* =========================
-        🎤 INTERVIEW MODE
-    ========================== */
-    return {
-      mode: "Interview Mode",
-      status: isCorrect ? "Strong Answer ✅" : "Needs Refinement ⚠️",
-
-      problems: issues,
-
-      correctedCode: fixedCode,
-
-      explanation:
-        "In interviews, focus on logic, edge cases, and clarity. Always explain WHY your solution works.",
-
-      interviewQuestions: [
-        "Explain your approach step by step",
-        "What edge cases can break this code?",
-        "What is time complexity?",
-        "How would you optimize this further?",
-        "Can you write alternative solutions?",
-      ],
-
-      realWorldInsight:
-        "This type of logic is commonly used in backend APIs, automation scripts, and system workflows in real companies.",
-    };
   };
 
   /* =========================
-      OUTPUT UI
-  ========================== */
-  const renderOutput = () => {
-    if (!result) return null;
+      HISTORY
+  ========================= */
 
-    return (
-      <div className="p-5 space-y-5 bg-[#0b1220] border border-gray-700 rounded-xl text-white">
+  const loadHistoryItem = (item) => {
+    setCode(item.input || '');
+    setLanguage(item.language || 'javascript');
+    setPrompt(item.prompt || '');
+    setResult(item);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-        {/* MODE */}
-        <div className="text-blue-400 font-bold">
-          {result.mode}
-        </div>
+  const deleteHistoryItem = (id) => {
+    deleteReview(id);
+    setHistory(getReviews());
+    toast.success('Deleted');
+  };
 
-        {/* STATUS */}
-        <div className="p-3 bg-[#111c33] border-l-4 border-blue-500 rounded">
-          <strong>{result.status}</strong>
-        </div>
-
-        {/* PROBLEMS */}
-        <div className="p-3 bg-[#111c33] border-l-4 border-red-500 rounded">
-          <h3 className="text-red-400 font-bold">Issues</h3>
-
-          {result.problems.map((p, i) => (
-            <p key={i}>• {p}</p>
-          ))}
-        </div>
-
-        {/* CODE */}
-        <div className="p-3 bg-[#111c33] border-l-4 border-green-500 rounded">
-          <h3 className="text-green-400 font-bold">Corrected Code</h3>
-
-          <pre className="bg-black p-3 text-green-300 overflow-auto text-xs">
-            {result.correctedCode}
-          </pre>
-        </div>
-
-        {/* EXPLANATION */}
-        <div className="p-3 bg-[#111c33] border-l-4 border-yellow-500 rounded">
-          <h3 className="text-yellow-400 font-bold">Explanation</h3>
-          <p>{result.explanation}</p>
-        </div>
-
-        {/* INTERVIEW MODE ONLY */}
-        {result.interviewQuestions && (
-          <div className="p-3 bg-[#111c33] border-l-4 border-purple-500 rounded">
-            <h3 className="text-purple-400 font-bold">
-              Interview Questions
-            </h3>
-
-            {result.interviewQuestions.map((q, i) => (
-              <p key={i}>• {q}</p>
-            ))}
-          </div>
-        )}
-
-        {/* REAL WORLD INSIGHT */}
-        {result.realWorldInsight && (
-          <div className="p-3 bg-[#111c33] border-l-4 border-cyan-500 rounded">
-            <h3 className="text-cyan-400 font-bold">
-              Real World Insight
-            </h3>
-            <p>{result.realWorldInsight}</p>
-          </div>
-        )}
-
-      </div>
-    );
+  const clearAllHistoryItems = () => {
+    clearAllReviews();
+    setHistory([]);
+    toast.success('History cleared');
   };
 
   /* =========================
-      MAIN UI
-  ========================== */
+      ACTIONS
+  ========================= */
+
+  const handleCopyCode = async () => {
+    if (!result?.correctedCode) return;
+    await copyToClipboard(result.correctedCode);
+    toast.success('Copied');
+  };
+
+  const handleDownloadCode = () => {
+    if (!result?.correctedCode) return;
+    const ext = getCodeExtension(language);
+    downloadTextFile(result.correctedCode, `code.${ext}`);
+  };
+
+  const handleDownloadReport = () => {
+    if (!result) return;
+    downloadTextFile(JSON.stringify(result, null, 2), 'report.json');
+  };
+
   return (
     <>
       <Helmet>
-        <title>AI Code Analyzer</title>
+        <title>DevInspect AI</title>
       </Helmet>
 
-      <div className="p-6 grid grid-cols-2 gap-6 bg-[#070b14] min-h-screen text-white">
+      <div className="min-h-screen bg-[#070b14] text-white p-6">
 
-        {/* LEFT */}
-        <div className="space-y-4">
+        {/* HEADER */}
+        <h1 className="text-4xl font-bold">DevInspect AI</h1>
 
-          <div className="p-4 bg-[#111827] rounded">
-            <h2>👤 {username}</h2>
-            <p>Mode: {currentMode}</p>
-          </div>
+        {/* INPUT */}
+        <Textarea
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Paste code..."
+        />
 
-          <Textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="min-h-[200px] bg-[#111827]"
-            placeholder="Paste code..."
-          />
+        {/* BUTTON */}
+        <Button onClick={handleRun} disabled={loading}>
+          <Play className="w-4 h-4 mr-2" />
+          {loading ? 'Analyzing...' : 'Run AI'}
+        </Button>
 
-          <Input
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            placeholder="Language"
-          />
-
-          <Input
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Optional prompt"
-          />
-
-          <Button onClick={handleRun}>
-            {loading ? "Analyzing..." : "Run Analysis"}
-          </Button>
-
-        </div>
-
-        {/* RIGHT */}
-        <div>
-          <h2>AI Output</h2>
-
-          <AnimatePresence>
-            {result && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                {renderOutput()}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-        </div>
+        {/* OUTPUT */}
+        <AnimatePresence>
+          {result && (
+            <motion.div>
+              <pre>{result.correctedCode}</pre>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       </div>
     </>
