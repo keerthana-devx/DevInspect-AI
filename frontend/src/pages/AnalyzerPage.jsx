@@ -281,28 +281,56 @@ const AnalyzerPage = () => {
     toast.success('Suggested refactored code applied to editor!');
   };
 
-  // Simulated Chat Interface
-  const handleSendChatMessage = () => {
+  // Real AI Chat - calls /api/chat/followup with analysis context
+  const handleSendChatMessage = async () => {
     if (!chatInput.trim()) return;
 
     const userMsg = { sender: 'user', text: chatInput };
     setChatMessages(prev => [...prev, userMsg]);
+    const currentInput = chatInput;
     setChatInput('');
 
-    setTimeout(() => {
-      let replyText = "That's an interesting question about the code block. ";
-      
-      const lower = chatInput.toLowerCase();
-      if (lower.includes('why') || lower.includes('explain')) {
-        replyText += "This suggestion aims to improve reliability. By refactoring here, we prevent runtime failures under high load and align with optimal style rules.";
-      } else if (lower.includes('security') || lower.includes('vulnerability')) {
-        replyText += "We flagged this because exposing hardcoded credentials or unsanitized strings to inputs presents severe vulnerability vectors like leakage or injection.";
-      } else {
-        replyText += "I recommend refactoring according to standard guidelines (e.g., modular components, strict typescript typing, and secure environment keys). Let me know if you would like me to rewrite it.";
-      }
+    // Optimistic loading indicator
+    setChatMessages(prev => [...prev, { sender: 'ai', text: '...', loading: true }]);
 
-      setChatMessages(prev => [...prev, { sender: 'ai', text: replyText }]);
-    }, 1000);
+    try {
+      const token = localStorage.getItem('devinspect-token');
+      const response = await fetch(`${API_ORIGIN}/api/chat/followup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: currentInput,
+          context: result ? {
+            mode:         result.mode,
+            language:     result.language,
+            aiScore:      result.aiScore,
+            explanation:  result.explanation,
+            correctedCode: result.correctedCode,
+            errors:       result.errors,
+            suggestions:  result.suggestions,
+            questions:    result.questions,
+          } : null,
+        }),
+      });
+
+      const data = await response.json();
+      const replyText = data.reply || 'No response from AI assistant.';
+
+      // Replace loading indicator with real reply
+      setChatMessages(prev => [
+        ...prev.filter(m => !m.loading),
+        { sender: 'ai', text: replyText },
+      ]);
+    } catch (err) {
+      console.error('Chat error:', err);
+      setChatMessages(prev => [
+        ...prev.filter(m => !m.loading),
+        { sender: 'ai', text: 'Chat assistant is temporarily unavailable. Please try again.' },
+      ]);
+    }
   };
 
   const handleExportMarkdown = () => {
@@ -641,7 +669,7 @@ ${result.correctedCode}
                       ) : (
                         chatMessages.map((msg, i) => (
                           <div key={i} className={`p-2 rounded-xl max-w-[85%] ${msg.sender === 'user' ? 'bg-primary/20 ml-auto text-right' : 'bg-muted border border-border/30'}`}>
-                            <p className="leading-relaxed">{msg.text}</p>
+                            <p className="leading-relaxed">{msg.loading ? <span className="animate-pulse">AI is thinking...</span> : msg.text}</p>
                           </div>
                         ))
                       )}

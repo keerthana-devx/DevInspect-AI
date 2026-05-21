@@ -139,11 +139,9 @@ const DashboardPage = () => {
             statsCalculated.modeCounts.interviewer,
             statsCalculated.modeCounts.developer,
           ],
-          backgroundColor: [
-            "hsl(var(--primary))",
-            "hsl(var(--secondary))",
-            "hsl(var(--accent))",
-          ],
+          // Use explicit hex colors — CSS variables don't resolve inside Chart.js canvas
+          backgroundColor: ["#6366f1", "#ec4899", "#14b8a6"],
+          hoverBackgroundColor: ["#818cf8", "#f472b6", "#2dd4bf"],
           borderWidth: 0,
         },
       ],

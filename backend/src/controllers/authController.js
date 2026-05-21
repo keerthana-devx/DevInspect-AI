@@ -15,13 +15,18 @@ export const registerUser = async (req, res) => {
     }
 
     const user = await User.create({ name, email, password });
+
+    // Log registration activity
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '';
+    await user.logActivity('register', `Account created`, ip);
+
     const token = generateToken(user._id);
 
     res.status(201).json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
+      _id:         user._id,
+      name:        user.name,
+      email:       user.email,
+      role:        user.role,
       currentMode: user.currentMode,
       token,
     });
@@ -49,14 +54,19 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Record login timestamp and activity
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '';
+    await user.logActivity('login', `Login from ${ip || 'unknown'}`, ip);
+
     const token = generateToken(user._id);
 
     res.json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
+      _id:         user._id,
+      name:        user.name,
+      email:       user.email,
+      role:        user.role,
       currentMode: user.currentMode,
+      lastLogin:   user.lastLogin,
       token,
     });
   } catch (error) {

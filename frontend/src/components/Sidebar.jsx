@@ -8,7 +8,8 @@ import {
   Settings, 
   User, 
   Zap,
-  LogOut 
+  LogOut,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { cn } from '@/lib/utils';
@@ -16,7 +17,7 @@ import { Button } from '@/components/ui/button';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
-  const { currentMode, logout } = useAuth();
+  const { currentMode, currentUser, logout } = useAuth();
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'baby-pink' },
@@ -176,6 +177,28 @@ const Sidebar = ({ isOpen, onClose }) => {
                 </motion.div>
               );
             })}
+
+            {/* Admin link — only visible to admin users */}
+            {currentUser?.role === 'admin' && (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+              >
+                <Link
+                  to="/admin"
+                  onClick={handleLinkClick}
+                  className={cn(
+                    'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden',
+                    isActive('/admin')
+                      ? 'bg-destructive/10 text-destructive font-semibold shadow-lg'
+                      : 'text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive font-medium'
+                  )}
+                >
+                  <Shield className="h-5 w-5" />
+                  <span>Admin Panel</span>
+                </Link>
+              </motion.div>
+            )}
           </nav>
           
           <Button

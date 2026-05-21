@@ -19,6 +19,7 @@ import HistoryPage from '@/pages/HistoryPage.jsx';
 import SwitchModePage from '@/pages/SwitchModePage.jsx';
 import SettingsPage from '@/pages/SettingsPage.jsx';
 import ProfilePage from '@/pages/ProfilePage.jsx';
+import AdminPage from '@/pages/AdminPage.jsx';
 
 // ScrollToTop Component
 const ScrollToTop = () => {
@@ -78,6 +79,7 @@ const AnimatedRoutes = () => {
         <Route path="/switch-mode" element={<ProtectedRoute><AppLayout><AnimatedRoute><SwitchModePage /></AnimatedRoute></AppLayout></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><AppLayout><AnimatedRoute><SettingsPage /></AnimatedRoute></AppLayout></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><AppLayout><AnimatedRoute><ProfilePage /></AnimatedRoute></AppLayout></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute><AppLayout><AnimatedRoute><AdminPage /></AnimatedRoute></AppLayout></ProtectedRoute>} />
         
         {/* 404 Fallback */}
         <Route path="*" element={

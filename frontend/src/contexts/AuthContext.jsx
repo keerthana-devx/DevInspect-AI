@@ -110,6 +110,21 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem("devinspect-mode");
   };
 
+  const deleteAccountOnBackend = async () => {
+    const token = localStorage.getItem("devinspect-token");
+    const response = await fetch(`${USER_PROFILE_URL}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : '',
+      },
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.message || 'Failed to delete account');
+    }
+  };
+
   const switchMode = (mode) => {
     const normalized = normalizeMode(mode);
     setCurrentMode(normalized);
@@ -129,6 +144,7 @@ export const AuthProvider = ({ children }) => {
         logout,
         switchMode,
         getAuthHeaders,
+        deleteAccountOnBackend,
       }}
     >
       {children}
