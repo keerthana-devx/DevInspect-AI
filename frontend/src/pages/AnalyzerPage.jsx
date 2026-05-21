@@ -487,8 +487,9 @@ ${result.correctedCode}
                       <div className="space-y-4">
                         <div className="rounded-xl border border-border/30 overflow-hidden font-mono text-xs max-h-[220px] overflow-y-auto bg-muted/20">
                           <div className="bg-muted/60 px-3 py-1 text-[10px] text-muted-foreground border-b border-border/30">Side-by-Side Suggested Refactor</div>
-                          <pre className="p-3 text-green-500 overflow-x-auto whitespace-pre">{result.correctedCode || '// No corrected code output'}</pre>
-                        </div>
+<pre className="p-3 text-green-500 overflow-x-auto whitespace-pre">
+  {result.correctedCode ?? '// No corrected code output'}
+</pre>                        </div>
 
                         {/* Inline Findings */}
                         <div className="space-y-2.5">
@@ -515,15 +516,22 @@ ${result.correctedCode}
                     {viewTab === 'explanation' && (
                       <div className="space-y-3">
                         <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                          <p className="text-sm leading-relaxed text-foreground/90">{result.explanation}</p>
+                         <p className="text-sm leading-relaxed text-foreground/90">
+  {typeof result.explanation === 'string'
+    ? result.explanation.split(',').join('\n')
+    : result.explanation}
+</p>
                         </div>
                       </div>
                     )}
 
                     {viewTab === 'raw' && (
                       <div className="rounded-xl border border-border/30 p-3 bg-muted/20 font-mono text-xs overflow-x-auto max-h-[300px] overflow-y-auto">
-                        <pre className="whitespace-pre-wrap">{result.modeOutput || 'No output details.'}</pre>
-                      </div>
+<pre className="whitespace-pre-wrap">
+  {typeof result.modeOutput === 'string'
+    ? result.modeOutput.replace(/,/g, '\n')
+    : 'No output details.'}
+</pre>                      </div>
                     )}
                   </div>
 

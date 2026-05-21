@@ -1,8 +1,16 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import app from './app.js';
+
 import adminRoutes from "./routes/adminRoutes.js";
+import analysisRoutes from "./routes/analysisRoutes.js";
+
+/* ================================
+   ROUTES
+================================ */
+
 app.use("/api/admin", adminRoutes);
+app.use("/api/analysis", analysisRoutes);
 
 /* ================================
    DEBUG ENV
@@ -26,7 +34,6 @@ console.log(`   OPENROUTER_MODEL: ${process.env.OPENROUTER_MODEL || 'not set'}`)
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGO_URI);
-
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`❌ MongoDB Connection Error: ${error.message}`);
@@ -40,21 +47,15 @@ const connectDB = async () => {
 
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received');
-
   await mongoose.connection.close();
-
   console.log('MongoDB connection closed');
-
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received');
-
   await mongoose.connection.close();
-
   console.log('MongoDB connection closed');
-
   process.exit(0);
 });
 
@@ -69,11 +70,8 @@ const startServer = async () => {
 
   const server = app.listen(PORT, () => {
     console.log(`🚀 DevInspectAI API running on port ${PORT}`);
-
     console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-
     console.log(`🔗 Health: http://localhost:${PORT}/api/health`);
-
     console.log(
       `🤖 AI Service: ${
         process.env.OPENROUTER_API_KEY
@@ -89,7 +87,6 @@ const startServer = async () => {
     } else {
       console.error(`❌ Server error:`, error);
     }
-
     process.exit(1);
   });
 };

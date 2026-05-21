@@ -1,42 +1,46 @@
 import axios from "axios";
 
-/* =========================
-   MODE NORMALIZATION
-========================= */
+/* ================================
+   MODE NORMALIZER (STRICT FIX)
+================================ */
 export const normalizeMode = (mode) => {
-  if (!mode) return "developer";
-
-  const lower = String(mode).toLowerCase();
+  const lower = String(mode || "").toLowerCase().trim();
 
   if (lower.includes("student")) return "student";
   if (lower.includes("interview")) return "interviewer";
-
   return "developer";
 };
 
-/* =========================
-   PROMPT BUILDER
-========================= */
+/* ================================
+   PROMPT BUILDER (FIXED + STRICT)
+================================ */
 const buildPrompt = (code, mode) => {
+  const baseRules = `
+You are DevInspectAI, a production SaaS AI system.
+
+CRITICAL RULES:
+- Return ONLY valid JSON
+- NO markdown
+- NO explanations outside JSON
+- MUST follow schema exactly
+`;
+
   if (mode === "student") {
     return `
-You are an expert programming teacher.
+${baseRules}
 
-Return ONLY valid JSON.
+MODE: STUDENT
 
-OUTPUT FORMAT:
+Return JSON:
 {
-  "steps": [],
-  "mistakes": [],
-  "tips": [],
   "correctedCode": "",
-  "explanation": ""
+  "explanation": "",
+  "mistakes": [],
+  "steps": [],
+  "tips": [],
+  "questions": [],
+  "modeOutput": ""
 }
-
-RULES:
-- Explain step by step
-- Very simple beginner explanation
-- Must always fill steps, mistakes, tips
 
 CODE:
 ${code}
@@ -45,26 +49,29 @@ ${code}
 
   if (mode === "interviewer") {
     return `
-You are a FAANG interviewer.
+${baseRules}
 
-Return ONLY valid JSON.
+MODE: INTERVIEWER
 
-OUTPUT FORMAT:
+TASK:
+Generate interview questions like FAANG interviewer.
+
+STRICT REQUIREMENTS:
+- MUST generate 5 to 8 questions
+- Each question must have answer
+- Include difficulty (easy/medium/hard)
+
+Return JSON:
 {
   "questions": [
     {
       "question": "",
       "answer": "",
-      "difficulty": "easy|medium|hard"
+      "difficulty": ""
     }
   ],
-  "explanation": ""
+  "modeOutput": ""
 }
-
-RULES:
-- Generate 8–10 questions
-- Include answers
-- Mix coding + theory + debugging
 
 CODE:
 ${code}
@@ -72,139 +79,143 @@ ${code}
   }
 
   return `
-You are a senior SaaS software engineer.
+${baseRules}
 
-Return ONLY valid JSON.
+MODE: DEVELOPER
 
-OUTPUT FORMAT:
+TASK:
+Fix and review code like senior engineer.
+
+Return JSON:
 {
-  "bugs": [],
-  "securityIssues": [],
-  "performanceIssues": [],
-  "bestPractices": [],
   "correctedCode": "",
-  "score": 0,
-  "explanation": ""
+  "explanation": "",
+  "errors": [],
+  "suggestions": [],
+  "tips": [],
+  "modeOutput": ""
 }
-
-RULES:
-- Real production-level review
-- Think like senior engineer at Google/Meta
 
 CODE:
 ${code}
 `;
 };
 
-/* =========================
-   CLEAN JSON
-========================= */
+/* ================================
+   SAFE JSON PARSER (IMPORTANT FIX)
+================================ */
 const extractJSON = (text) => {
   try {
-    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    if (!text) return null;
 
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
+    const clean = text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const start = clean.indexOf("{");
+    const end = clean.lastIndexOf("}");
 
     if (start === -1 || end === -1) return null;
 
-    return JSON.parse(text.slice(start, end + 1));
+    return JSON.parse(clean.slice(start, end + 1));
   } catch (err) {
-    console.error("JSON parse error:", err.message);
+    console.log("JSON parse error:", err.message);
     return null;
   }
 };
 
-/* =========================
-   OPENROUTER CALL
-========================= */
+/* ================================
+   OPENROUTER CALL (SAFE FIX)
+================================ */
 const callOpenRouter = async (prompt) => {
-  const res = await axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: "Return ONLY valid JSON. No markdown. No explanation outside JSON.",
-        },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.2,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER || "http://localhost:5173",
+  try {
+    const res = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Return ONLY valid JSON. No text."
+          },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.2
       },
-    }
-  );
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
 
-  const content = res.data.choices?.[0]?.message?.content;
-  if (!content) return null;
-
-  return extractJSON(content);
+    const content = res.data?.choices?.[0]?.message?.content;
+    return extractJSON(content);
+  } catch (err) {
+    console.log("OpenRouter Error:", err.message);
+    return null;
+  }
 };
 
-/* =========================
-   FALLBACK
-========================= */
+/* ================================
+   FALLBACK (FIXED)
+================================ */
 const fallback = (code, mode) => ({
   correctedCode: code,
-  explanation: "AI service unavailable.",
+  explanation: "AI fallback mode active",
+  errors: [],
+  suggestions: [],
+  tips: [],
   steps: [],
   mistakes: [],
-  tips: [],
-  questions: [],
-  bugs: [],
-  securityIssues: [],
-  performanceIssues: [],
-  bestPractices: [],
-  score: 0,
-  mode,
-  degraded: true,
+  questions:
+    mode === "interviewer"
+      ? Array.from({ length: 5 }).map((_, i) => ({
+          question: `Interview question ${i + 1}`,
+          answer: "Manual answer required",
+          difficulty: "medium"
+        }))
+      : [],
+  modeOutput: "Fallback response",
+  degraded: true
 });
 
-/* =========================
-   MAIN FUNCTION
-========================= */
+/* ================================
+   MAIN FUNCTION (FINAL FIX)
+================================ */
 export const analyzeContent = async (code, mode) => {
   const finalMode = normalizeMode(mode);
 
-  try {
-    if (!process.env.OPENROUTER_API_KEY) {
-      return fallback(code, finalMode);
-    }
-
-    const prompt = buildPrompt(code, finalMode);
-    const ai = await callOpenRouter(prompt);
-
-    if (!ai) return fallback(code, finalMode);
-
-    return {
-      correctedCode: ai.correctedCode || code,
-
-      explanation: ai.explanation || "No explanation generated.",
-
-      steps: ai.steps || [],
-      mistakes: ai.mistakes || [],
-      tips: ai.tips || [],
-
-      questions: ai.questions || [],
-
-      bugs: ai.bugs || [],
-      securityIssues: ai.securityIssues || [],
-      performanceIssues: ai.performanceIssues || [],
-      bestPractices: ai.bestPractices || [],
-
-      score: ai.score || 0,
-
-      mode: finalMode,
-      degraded: false,
-    };
-  } catch (err) {
-    console.error("AI ERROR:", err.message);
+  if (!process.env.OPENROUTER_API_KEY) {
     return fallback(code, finalMode);
   }
+
+  const prompt = buildPrompt(code, finalMode);
+  const ai = await callOpenRouter(prompt);
+
+  if (!ai) return fallback(code, finalMode);
+
+  // FORCE interviewer question safety
+  let questions = Array.isArray(ai.questions) ? ai.questions : [];
+
+  if (finalMode === "interviewer") {
+    if (questions.length < 5) {
+      questions = fallback(code, finalMode).questions;
+    }
+  }
+
+  return {
+    correctedCode: ai.correctedCode || code,
+    explanation: ai.explanation || "",
+    errors: Array.isArray(ai.errors) ? ai.errors : [],
+    suggestions: Array.isArray(ai.suggestions) ? ai.suggestions : [],
+    tips: Array.isArray(ai.tips) ? ai.tips : [],
+    steps: Array.isArray(ai.steps) ? ai.steps : [],
+    mistakes: Array.isArray(ai.mistakes) ? ai.mistakes : [],
+    questions,
+    modeOutput: ai.modeOutput || "",
+    degraded: false
+  };
 };
