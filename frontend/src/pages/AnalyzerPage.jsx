@@ -185,17 +185,36 @@ const AnalyzerPage = () => {
 
       const srvData = await response.json();
       
-      // Save locally
+      const r = srvData.result || {};
+
+      // Build full result object matching all schema fields
       const payload = {
-        input: finalCode,
-        language: detectedLang,
+        input:         finalCode,
+        language:      detectedLang,
         mode,
-        correctedCode: srvData.result?.correctedCode || '',
-        explanation: srvData.result?.explanation || 'No summary.',
-        modeOutput: srvData.result?.modeOutput || '',
-        errors: srvData.result?.errors || [],
-        timestamp: new Date().toISOString(),
-        workspaceId: selectedWorkspace
+        correctedCode: r.correctedCode || '',
+        explanation:   r.explanation   || '',
+        modeOutput:    r.modeOutput    || '',
+        errors:        Array.isArray(r.errors)      ? r.errors      : [],
+        suggestions:   Array.isArray(r.suggestions) ? r.suggestions : [],
+        questions:     Array.isArray(r.questions)   ? r.questions   : [],
+        mistakes:      Array.isArray(r.mistakes)    ? r.mistakes    : [],
+        steps:         Array.isArray(r.steps)       ? r.steps       : [],
+        tips:          Array.isArray(r.tips)        ? r.tips        : [],
+        aiScore:       (() => {
+          let score = 100;
+          (Array.isArray(r.errors) ? r.errors : []).forEach(e => {
+            const sev = String(e.severity || '').toLowerCase();
+            if (sev.includes('critical'))    score -= 25;
+            else if (sev.includes('high'))   score -= 15;
+            else if (sev.includes('medium')) score -= 8;
+            else                             score -= 3;
+          });
+          return Math.max(0, Math.min(100, score));
+        })(),
+        degraded:      Boolean(r.degraded),
+        timestamp:     new Date().toISOString(),
+        workspaceId:   selectedWorkspace,
       };
 
       setResult(payload);
@@ -497,17 +516,23 @@ ${result.correctedCode}
                           {result.errors.length === 0 ? (
                             <div className="text-xs text-muted-foreground p-3 bg-green-500/10 rounded-xl border border-green-500/20 flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500" /> No severe issues found.</div>
                           ) : (
-                            result.errors.map((e, idx) => (
-                              <div key={idx} className="p-3 bg-muted/30 rounded-xl border border-border/30 text-xs">
-                                <div className="flex justify-between items-center mb-1.5">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    e.severity === 'Critical' || e.severity === 'High' ? 'bg-destructive/10 text-destructive border border-destructive/20' : 'bg-orange-500/10 text-orange-500 border border-orange-500/20'
-                                  }`}>{e.severity} Severity</span>
-                                  <span className="text-[10px] text-muted-foreground">{e.category} · Line {e.line || 'All'}</span>
+                            result.errors.map((e, idx) => {
+                              const sev = String(e.severity || '').toLowerCase();
+                              const isHigh = sev === 'critical' || sev === 'high';
+                              return (
+                                <div key={idx} className="p-3 bg-muted/30 rounded-xl border border-border/30 text-xs">
+                                  <div className="flex justify-between items-center mb-1.5">
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      isHigh ? 'bg-destructive/10 text-destructive border border-destructive/20' : 'bg-orange-500/10 text-orange-500 border border-orange-500/20'
+                                    }`}>{e.severity} Severity</span>
+                                    <span className="text-[10px] text-muted-foreground">{e.category} · Line {e.line || 'N/A'}</span>
+                                  </div>
+                                  <p className="text-foreground leading-relaxed">{e.message}</p>
+                                  {e.why  && <p className="text-muted-foreground mt-1 leading-relaxed">Why: {e.why}</p>}
+                                  {e.fix  && <p className="text-green-500 mt-1 leading-relaxed">Fix: {e.fix}</p>}
                                 </div>
-                                <p className="text-foreground leading-relaxed">{e.message}</p>
-                              </div>
-                            ))
+                              );
+                            })
                           )}
                         </div>
                       </div>
@@ -516,22 +541,93 @@ ${result.correctedCode}
                     {viewTab === 'explanation' && (
                       <div className="space-y-3">
                         <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                         <p className="text-sm leading-relaxed text-foreground/90">
-  {typeof result.explanation === 'string'
-    ? result.explanation.split(',').join('\n')
-    : result.explanation}
-</p>
+                          <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">
+                            {result.explanation || 'No explanation available.'}
+                          </p>
                         </div>
+
+                        {/* Student mode extras */}
+                        {result.steps?.length > 0 && (
+                          <div className="p-3 bg-muted/30 rounded-xl border border-border/20">
+                            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Steps</h4>
+                            <ol className="space-y-1">
+                              {result.steps.map((s, i) => (
+                                <li key={i} className="text-xs text-foreground/80 flex gap-2">
+                                  <span className="text-primary font-bold shrink-0">{i + 1}.</span> {s}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+
+                        {result.tips?.length > 0 && (
+                          <div className="p-3 bg-muted/30 rounded-xl border border-border/20">
+                            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Tips</h4>
+                            <ul className="space-y-1">
+                              {result.tips.map((t, i) => (
+                                <li key={i} className="text-xs text-foreground/80 flex gap-2"><span className="text-primary">•</span> {t}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {result.mistakes?.length > 0 && (
+                          <div className="p-3 bg-muted/30 rounded-xl border border-border/20">
+                            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Mistakes</h4>
+                            <div className="space-y-2">
+                              {result.mistakes.map((m, i) => (
+                                <div key={i} className="text-xs">
+                                  <p className="font-semibold text-destructive">{m.issue || m}</p>
+                                  {m.whyItHappened && <p className="text-muted-foreground mt-0.5">Why: {m.whyItHappened}</p>}
+                                  {m.fix && <p className="text-green-500 mt-0.5">Fix: {m.fix}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Interviewer mode: questions */}
+                        {result.questions?.length > 0 && (
+                          <div className="p-3 bg-muted/30 rounded-xl border border-border/20">
+                            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Interview Questions ({result.questions.length})</h4>
+                            <div className="space-y-3">
+                              {result.questions.map((q, i) => (
+                                <div key={i} className="text-xs border-l-2 border-primary/40 pl-3">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      q.difficulty === 'hard'   ? 'bg-destructive/10 text-destructive' :
+                                      q.difficulty === 'medium' ? 'bg-orange-500/10 text-orange-500' :
+                                                                   'bg-green-500/10 text-green-500'
+                                    }`}>{q.difficulty}</span>
+                                    <p className="font-semibold text-foreground">{q.question}</p>
+                                  </div>
+                                  <p className="text-muted-foreground leading-relaxed whitespace-pre-line">{q.answer}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Developer mode: suggestions */}
+                        {result.suggestions?.length > 0 && (
+                          <div className="p-3 bg-muted/30 rounded-xl border border-border/20">
+                            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Suggestions</h4>
+                            <ul className="space-y-1">
+                              {result.suggestions.map((s, i) => (
+                                <li key={i} className="text-xs text-foreground/80 flex gap-2"><span className="text-primary">→</span> {s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {viewTab === 'raw' && (
                       <div className="rounded-xl border border-border/30 p-3 bg-muted/20 font-mono text-xs overflow-x-auto max-h-[300px] overflow-y-auto">
-<pre className="whitespace-pre-wrap">
-  {typeof result.modeOutput === 'string'
-    ? result.modeOutput.replace(/,/g, '\n')
-    : 'No output details.'}
-</pre>                      </div>
+                        <pre className="whitespace-pre-wrap">
+                          {result.modeOutput || 'No output details.'}
+                        </pre>
+                      </div>
                     )}
                   </div>
 

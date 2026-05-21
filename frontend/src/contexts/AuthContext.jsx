@@ -71,8 +71,8 @@ export const AuthProvider = ({ children }) => {
       id: data._id,
       email: data.email,
       name: data.name,
-      role: data.role || "Developer",
-      currentMode: data.currentMode || "developer",
+      role: data.role || 'user',
+      currentMode: data.currentMode || 'developer',
     };
 
     // SAVE TOKEN

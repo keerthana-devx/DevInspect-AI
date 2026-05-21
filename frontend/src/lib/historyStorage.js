@@ -28,23 +28,26 @@ export const computeAiScore = (errors = []) => {
 // Map backend Analysis document format to frontend review structure
 export const mapServerReview = (srv) => {
   if (!srv) return null;
-  const errors = srv.result?.errors || [];
+  const errors = Array.isArray(srv.result?.errors) ? srv.result.errors : [];
   return {
-    id: srv._id,
-    timestamp: srv.createdAt || new Date().toISOString(),
-    language: srv.language || "javascript",
-    mode: normalizeMode(srv.mode),
-    input: srv.inputText || "",
-    correctedCode: srv.result?.correctedCode || "",
-    explanation: srv.result?.explanation || "",
-    modeOutput: srv.result?.modeOutput || "",
+    id:           srv._id,
+    timestamp:    srv.createdAt || new Date().toISOString(),
+    language:     srv.language  || 'javascript',
+    mode:         normalizeMode(srv.mode),
+    input:        srv.inputText || '',
+    correctedCode: srv.result?.correctedCode || '',
+    explanation:  srv.result?.explanation   || '',
+    modeOutput:   srv.result?.modeOutput    || '',
     errors,
-    issues: errors,
-    suggestions: srv.result?.suggestions || [],
-    questions: srv.result?.questions || [],
-    aiScore: computeAiScore(errors),
+    issues:       errors,
+    suggestions:  Array.isArray(srv.result?.suggestions) ? srv.result.suggestions : [],
+    questions:    Array.isArray(srv.result?.questions)   ? srv.result.questions   : [],
+    mistakes:     Array.isArray(srv.result?.mistakes)    ? srv.result.mistakes    : [],
+    steps:        Array.isArray(srv.result?.steps)       ? srv.result.steps       : [],
+    tips:         Array.isArray(srv.result?.tips)        ? srv.result.tips        : [],
+    aiScore:      computeAiScore(errors),
     isBookmarked: Boolean(srv.isBookmarked),
-    degraded: Boolean(srv.result?.degraded),
+    degraded:     Boolean(srv.result?.degraded),
   };
 };
 

@@ -1,97 +1,114 @@
 import Analysis from '../models/Analysis.js';
 import { analyzeContent, normalizeMode } from '../services/aiService.js';
 
-/* ---------------- Normalize AI Result ---------------- */
+/* ─── Normalize raw AI result to full schema ─────── */
 const normalizeResult = (raw, code) => ({
   correctedCode: raw.correctedCode || code,
-  explanation: raw.explanation || "",
-  aiScore: raw.aiScore ?? 80,
-  errors: raw.errors || [],
-  suggestions: raw.suggestions || [],
-  questions: raw.questions || [],
-  modeOutput: raw.modeOutput || ""
+  explanation:   raw.explanation   || '',
+  errors:        Array.isArray(raw.errors)      ? raw.errors      : [],
+  suggestions:   Array.isArray(raw.suggestions) ? raw.suggestions : [],
+  questions:     Array.isArray(raw.questions)   ? raw.questions   : [],
+  mistakes:      Array.isArray(raw.mistakes)    ? raw.mistakes    : [],
+  steps:         Array.isArray(raw.steps)       ? raw.steps       : [],
+  tips:          Array.isArray(raw.tips)        ? raw.tips        : [],
+  modeOutput:    raw.modeOutput || '',
+  degraded:      Boolean(raw.degraded),
 });
 
-/* ---------------- RUN ANALYSIS ---------------- */
+/* ─── Compute AI score from errors ───────────────── */
+const computeScore = (errors = []) => {
+  let score = 100;
+  errors.forEach(e => {
+    const sev = String(e.severity || '').toLowerCase();
+    if (sev.includes('critical')) score -= 25;
+    else if (sev.includes('high')) score -= 15;
+    else if (sev.includes('medium')) score -= 8;
+    else score -= 3;
+  });
+  return Math.max(0, Math.min(100, score));
+};
+
+/* ─── POST /api/analysis ──────────────────────────── */
 export const runAnalysis = async (req, res) => {
   try {
     const { text, mode, language, workspaceId } = req.body;
 
-    if (!text) {
-      return res.status(400).json({ message: "Code required" });
+    if (!text?.trim()) {
+      return res.status(400).json({ message: 'Code text is required' });
     }
 
     const finalMode = normalizeMode(mode);
+    const finalLang = language || 'javascript';
 
-    const raw = await analyzeContent(text, finalMode);
+    const raw    = await analyzeContent(text, finalMode);
     const result = normalizeResult(raw, text);
 
     const saved = await Analysis.create({
-      user: req.user._id,
-      workspace: workspaceId,
+      user:      req.user._id,
+      workspace: workspaceId || undefined,
       inputText: text,
       result,
-      mode: finalMode,
-      language: language || "javascript"
+      mode:      finalMode,
+      language:  finalLang,
     });
 
-    res.json({
-      success: true,
+    res.status(201).json({
+      success:   true,
+      _id:       saved._id,
       result,
-      id: saved._id
+      mode:      finalMode,
+      language:  finalLang,
+      createdAt: saved.createdAt,
     });
-
-  } catch (e) {
-    res.status(500).json({ message: e.message });
+  } catch (err) {
+    console.error('Analysis error:', err);
+    res.status(500).json({ message: err.message });
   }
 };
 
-/* ---------------- GET ALL ANALYSES ---------------- */
+/* ─── GET /api/analysis ───────────────────────────── */
 export const getAnalyses = async (req, res) => {
   try {
     const data = await Analysis.find({ user: req.user._id })
-      .sort({ createdAt: -1 });
-
+      .sort({ createdAt: -1 })
+      .lean();
     res.json(data);
-  } catch (e) {
-    res.status(500).json({ message: e.message });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
 
-/* ---------------- DELETE ONE ---------------- */
+/* ─── DELETE /api/analysis/:id ────────────────────── */
 export const deleteAnalysis = async (req, res) => {
   try {
-    await Analysis.findByIdAndDelete(req.params.id);
+    await Analysis.findOneAndDelete({ _id: req.params.id, user: req.user._id });
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ message: e.message });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
 
-/* ---------------- CLEAR ALL (IMPORTANT FIX) ---------------- */
+/* ─── DELETE /api/analysis (clear all) ───────────── */
 export const clearAllAnalyses = async (req, res) => {
   try {
-    await Analysis.deleteMany({ user: req.user._id });
-    res.json({ success: true, message: "All analyses cleared" });
-  } catch (e) {
-    res.status(500).json({ message: e.message });
+    const r = await Analysis.deleteMany({ user: req.user._id });
+    res.json({ success: true, deletedCount: r.deletedCount });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
 
-/* ---------------- TOGGLE BOOKMARK ---------------- */
+/* ─── PUT /api/analysis/:id/bookmark ─────────────── */
 export const toggleBookmark = async (req, res) => {
   try {
-    const analysis = await Analysis.findById(req.params.id);
+    const analysis = await Analysis.findOne({ _id: req.params.id, user: req.user._id });
+    if (!analysis) return res.status(404).json({ message: 'Not found' });
 
-    if (!analysis) {
-      return res.status(404).json({ message: "Not found" });
-    }
-
-    analysis.bookmarked = !analysis.bookmarked;
+    analysis.isBookmarked = !analysis.isBookmarked;
     await analysis.save();
 
-    res.json(analysis);
-  } catch (e) {
-    res.status(500).json({ message: e.message });
+    res.json({ isBookmarked: analysis.isBookmarked, _id: analysis._id });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };

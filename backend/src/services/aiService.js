@@ -1,190 +1,240 @@
-import axios from "axios";
+import axios from 'axios';
 
-/* ================================
-   MODE NORMALIZER (STRICT FIX)
-================================ */
+/* ─── Mode normalizer ────────────────────────────── */
 export const normalizeMode = (mode) => {
-  const lower = String(mode || "").toLowerCase().trim();
-
-  if (lower.includes("student")) return "student";
-  if (lower.includes("interview")) return "interviewer";
-  return "developer";
+  const lower = String(mode || '').toLowerCase().trim();
+  if (lower.includes('student'))   return 'student';
+  if (lower.includes('interview')) return 'interviewer';
+  return 'developer';
 };
 
-/* ================================
-   PROMPT BUILDER (FIXED + STRICT)
-================================ */
+/* ─── Prompt builder ─────────────────────────────── */
 const buildPrompt = (code, mode) => {
-  const baseRules = `
-You are DevInspectAI, a production SaaS AI system.
+  if (mode === 'student') {
+    return `You are an expert programming teacher reviewing code for a beginner student.
 
-CRITICAL RULES:
-- Return ONLY valid JSON
-- NO markdown
-- NO explanations outside JSON
-- MUST follow schema exactly
-`;
+STRICT RULES:
+- Return ONLY a single valid JSON object
+- No markdown, no code fences, no text before or after JSON
+- Every field is required — never omit any field
+- explanation must be at least 8 sentences covering: what the code does, what mistakes exist, why they happen, and how to fix them
+- mistakes array must have at least 1 entry per real issue found
+- steps must walk through the code line by line in simple language
+- tips must give 3+ actionable learning tips
 
-  if (mode === "student") {
-    return `
-${baseRules}
-
-MODE: STUDENT
-
-Return JSON:
+Return this exact JSON shape:
 {
-  "correctedCode": "",
-  "explanation": "",
+  "correctedCode": "<full corrected code as string>",
+  "explanation": "<detailed multi-sentence explanation, minimum 8 sentences>",
+  "mistakes": [
+    {
+      "issue": "<what is wrong>",
+      "whyItHappened": "<why this mistake happens>",
+      "fix": "<how to fix it>"
+    }
+  ],
+  "steps": ["<step 1>", "<step 2>", "<step 3>"],
+  "tips": ["<tip 1>", "<tip 2>", "<tip 3>"],
+  "questions": [],
+  "errors": [],
+  "suggestions": [],
+  "modeOutput": "<a friendly 3-4 sentence summary for a student>"
+}
+
+CODE TO REVIEW:
+\`\`\`
+${code}
+\`\`\``;
+  }
+
+  if (mode === 'interviewer') {
+    return `You are a FAANG-level technical interviewer reviewing code to generate interview questions.
+
+STRICT RULES:
+- Return ONLY a single valid JSON object
+- No markdown, no code fences, no text before or after JSON
+- MUST generate exactly 6 questions (no fewer, no more)
+- Each answer must be detailed — minimum 5 sentences explaining the concept, why it matters, and how it applies to this code
+- difficulty must be one of: "easy", "medium", "hard"
+- Include a mix: 2 easy, 2 medium, 2 hard
+- explanation must describe what the code does in an interview context (4+ sentences)
+
+Return this exact JSON shape:
+{
+  "correctedCode": "<corrected version of the code>",
+  "explanation": "<4+ sentence explanation of what this code does in interview context>",
+  "questions": [
+    {
+      "question": "<specific technical question about this code>",
+      "answer": "<detailed answer, minimum 5 sentences>",
+      "difficulty": "easy"
+    },
+    {
+      "question": "<question>",
+      "answer": "<detailed answer>",
+      "difficulty": "easy"
+    },
+    {
+      "question": "<question>",
+      "answer": "<detailed answer>",
+      "difficulty": "medium"
+    },
+    {
+      "question": "<question>",
+      "answer": "<detailed answer>",
+      "difficulty": "medium"
+    },
+    {
+      "question": "<question>",
+      "answer": "<detailed answer>",
+      "difficulty": "hard"
+    },
+    {
+      "question": "<question>",
+      "answer": "<detailed answer>",
+      "difficulty": "hard"
+    }
+  ],
+  "mistakes": [],
+  "steps": [],
+  "tips": [],
+  "errors": [],
+  "suggestions": [],
+  "modeOutput": "<2-3 sentence interview readiness assessment>"
+}
+
+CODE TO REVIEW:
+\`\`\`
+${code}
+\`\`\``;
+  }
+
+  // developer
+  return `You are a senior software engineer doing a production-grade code review.
+
+STRICT RULES:
+- Return ONLY a single valid JSON object
+- No markdown, no code fences, no text before or after JSON
+- explanation must be a thorough senior-level review: minimum 10 sentences covering architecture, bugs, security, performance, and maintainability
+- errors array must list every real issue found with line number, category, severity, message, why it is wrong, and how to fix it
+- suggestions must give 3+ concrete improvement recommendations
+- correctedCode must be the fully refactored version
+
+Return this exact JSON shape:
+{
+  "correctedCode": "<full refactored code>",
+  "explanation": "<thorough senior-level review, minimum 10 sentences>",
+  "errors": [
+    {
+      "line": <line number as integer or 0 if unknown>,
+      "category": "<security | logic | performance | syntax | style>",
+      "severity": "<low | medium | high | critical>",
+      "message": "<what is wrong>",
+      "why": "<why this is a problem>",
+      "fix": "<how to fix it>"
+    }
+  ],
+  "suggestions": ["<improvement 1>", "<improvement 2>", "<improvement 3>"],
   "mistakes": [],
   "steps": [],
   "tips": [],
   "questions": [],
-  "modeOutput": ""
+  "modeOutput": "<clean structured production readiness summary, 3-5 sentences>"
 }
 
-CODE:
+CODE TO REVIEW:
+\`\`\`
 ${code}
-`;
-  }
-
-  if (mode === "interviewer") {
-    return `
-${baseRules}
-
-MODE: INTERVIEWER
-
-TASK:
-Generate interview questions like FAANG interviewer.
-
-STRICT REQUIREMENTS:
-- MUST generate 5 to 8 questions
-- Each question must have answer
-- Include difficulty (easy/medium/hard)
-
-Return JSON:
-{
-  "questions": [
-    {
-      "question": "",
-      "answer": "",
-      "difficulty": ""
-    }
-  ],
-  "modeOutput": ""
-}
-
-CODE:
-${code}
-`;
-  }
-
-  return `
-${baseRules}
-
-MODE: DEVELOPER
-
-TASK:
-Fix and review code like senior engineer.
-
-Return JSON:
-{
-  "correctedCode": "",
-  "explanation": "",
-  "errors": [],
-  "suggestions": [],
-  "tips": [],
-  "modeOutput": ""
-}
-
-CODE:
-${code}
-`;
+\`\`\``;
 };
 
-/* ================================
-   SAFE JSON PARSER (IMPORTANT FIX)
-================================ */
+/* ─── JSON extractor with retry ──────────────────── */
 const extractJSON = (text) => {
+  if (!text) return null;
   try {
-    if (!text) return null;
-
-    const clean = text
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-
-    const start = clean.indexOf("{");
-    const end = clean.lastIndexOf("}");
-
+    // Strip markdown fences
+    let clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    const start = clean.indexOf('{');
+    const end   = clean.lastIndexOf('}');
     if (start === -1 || end === -1) return null;
-
     return JSON.parse(clean.slice(start, end + 1));
-  } catch (err) {
-    console.log("JSON parse error:", err.message);
+  } catch {
     return null;
   }
 };
 
-/* ================================
-   OPENROUTER CALL (SAFE FIX)
-================================ */
-const callOpenRouter = async (prompt) => {
-  try {
-    const res = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: "Return ONLY valid JSON. No text."
-          },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.2
+/* ─── OpenRouter call ────────────────────────────── */
+const callAI = async (prompt) => {
+  const res = await axios.post(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      model:    process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+      messages: [
+        {
+          role:    'system',
+          content: 'You are a strict JSON API. You ONLY output valid JSON objects. Never output markdown, code fences, or any text outside the JSON object.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.1,
+    },
+    {
+      headers: {
+        Authorization:                `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type':               'application/json',
+        'HTTP-Referer':               process.env.OPENROUTER_HTTP_REFERER || 'http://localhost:5173',
+        'X-Title':                    process.env.OPENROUTER_APP_NAME     || 'DevInspectAI',
       },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    const content = res.data?.choices?.[0]?.message?.content;
-    return extractJSON(content);
-  } catch (err) {
-    console.log("OpenRouter Error:", err.message);
-    return null;
-  }
+      timeout: 45000,
+    }
+  );
+  return res.data?.choices?.[0]?.message?.content || null;
 };
 
-/* ================================
-   FALLBACK (FIXED)
-================================ */
-const fallback = (code, mode) => ({
-  correctedCode: code,
-  explanation: "AI fallback mode active",
-  errors: [],
-  suggestions: [],
-  tips: [],
-  steps: [],
-  mistakes: [],
-  questions:
-    mode === "interviewer"
-      ? Array.from({ length: 5 }).map((_, i) => ({
-          question: `Interview question ${i + 1}`,
-          answer: "Manual answer required",
-          difficulty: "medium"
-        }))
-      : [],
-  modeOutput: "Fallback response",
-  degraded: true
+/* ─── Guaranteed fallback matching full schema ───── */
+const fallback = (code, mode) => {
+  const base = {
+    correctedCode: code,
+    explanation:   'AI service is currently unavailable. Please configure your OPENROUTER_API_KEY in the backend .env file to enable full AI-powered analysis.',
+    mistakes:      [],
+    steps:         [],
+    tips:          [],
+    questions:     [],
+    errors:        [],
+    suggestions:   [],
+    modeOutput:    'Running in offline fallback mode. Configure AI API keys for full analysis.',
+    degraded:      true,
+  };
+
+  if (mode === 'interviewer') {
+    base.questions = [
+      { question: 'What does this code do at a high level?',          answer: 'Review the code manually to determine its purpose and describe the overall logic flow.',          difficulty: 'easy'   },
+      { question: 'What variables or data structures are used?',       answer: 'Identify all variables, arrays, objects, or other data structures present in the code.',          difficulty: 'easy'   },
+      { question: 'Are there any potential bugs in this code?',        answer: 'Look for off-by-one errors, null reference issues, or incorrect conditional logic.',              difficulty: 'medium' },
+      { question: 'How would you improve the performance of this code?', answer: 'Consider algorithmic complexity, unnecessary loops, and opportunities for caching or memoization.', difficulty: 'medium' },
+      { question: 'What security vulnerabilities exist in this code?', answer: 'Check for injection risks, hardcoded secrets, improper input validation, and insecure data handling.', difficulty: 'hard' },
+      { question: 'How would you refactor this for production use?',   answer: 'Consider error handling, logging, modularity, testability, and adherence to SOLID principles.',   difficulty: 'hard'   },
+    ];
+  }
+
+  return base;
+};
+
+/* ─── Normalize AI output to guaranteed schema ───── */
+const normalize = (ai, code, mode) => ({
+  correctedCode: typeof ai.correctedCode === 'string' && ai.correctedCode.trim() ? ai.correctedCode : code,
+  explanation:   typeof ai.explanation   === 'string' && ai.explanation.trim()   ? ai.explanation   : '',
+  mistakes:      Array.isArray(ai.mistakes)    ? ai.mistakes    : [],
+  steps:         Array.isArray(ai.steps)       ? ai.steps       : [],
+  tips:          Array.isArray(ai.tips)        ? ai.tips        : [],
+  questions:     Array.isArray(ai.questions)   ? ai.questions   : [],
+  errors:        Array.isArray(ai.errors)      ? ai.errors      : [],
+  suggestions:   Array.isArray(ai.suggestions) ? ai.suggestions : [],
+  modeOutput:    typeof ai.modeOutput === 'string' ? ai.modeOutput : '',
+  degraded:      false,
 });
 
-/* ================================
-   MAIN FUNCTION (FINAL FIX)
-================================ */
+/* ─── Main export ────────────────────────────────── */
 export const analyzeContent = async (code, mode) => {
   const finalMode = normalizeMode(mode);
 
@@ -192,30 +242,33 @@ export const analyzeContent = async (code, mode) => {
     return fallback(code, finalMode);
   }
 
-  const prompt = buildPrompt(code, finalMode);
-  const ai = await callOpenRouter(prompt);
+  try {
+    const prompt  = buildPrompt(code, finalMode);
+    const rawText = await callAI(prompt);
+    let   ai      = extractJSON(rawText);
 
-  if (!ai) return fallback(code, finalMode);
-
-  // FORCE interviewer question safety
-  let questions = Array.isArray(ai.questions) ? ai.questions : [];
-
-  if (finalMode === "interviewer") {
-    if (questions.length < 5) {
-      questions = fallback(code, finalMode).questions;
+    // Retry once if JSON parse failed
+    if (!ai) {
+      console.warn('First AI parse failed, retrying...');
+      const retryText = await callAI(prompt);
+      ai = extractJSON(retryText);
     }
-  }
 
-  return {
-    correctedCode: ai.correctedCode || code,
-    explanation: ai.explanation || "",
-    errors: Array.isArray(ai.errors) ? ai.errors : [],
-    suggestions: Array.isArray(ai.suggestions) ? ai.suggestions : [],
-    tips: Array.isArray(ai.tips) ? ai.tips : [],
-    steps: Array.isArray(ai.steps) ? ai.steps : [],
-    mistakes: Array.isArray(ai.mistakes) ? ai.mistakes : [],
-    questions,
-    modeOutput: ai.modeOutput || "",
-    degraded: false
-  };
+    if (!ai) {
+      console.error('AI returned unparseable JSON after retry');
+      return fallback(code, finalMode);
+    }
+
+    const result = normalize(ai, code, finalMode);
+
+    // Guarantee interviewer always has >= 6 questions
+    if (finalMode === 'interviewer' && result.questions.length < 5) {
+      result.questions = fallback(code, finalMode).questions;
+    }
+
+    return result;
+  } catch (err) {
+    console.error('AI service error:', err.message);
+    return fallback(code, finalMode);
+  }
 };
