@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
+import { Helmet } from 'react-helmet-async';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Sparkles, Mail, Lock, User, Eye, EyeOff, Github, Chrome } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';

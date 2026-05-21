@@ -13,39 +13,34 @@ export const analyzeCode = async ({ code, mode }) => {
     throw new AiServiceError("Code is required", 400);
   }
 
-  const response = await fetch(ANALYZE_CODE_URL, {
+  const res = await fetch(ANALYZE_CODE_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({ code, mode }),
   });
 
-  let data = {};
-  try {
-    data = await response.json();
-  } catch {
-    data = {};
-  }
+  const data = await res.json().catch(() => ({}));
 
-  if (!response.ok) {
+  if (!res.ok) {
     throw new AiServiceError(
-      data.message || `Analysis failed (${response.status})`,
-      response.status
+      data.message || "Analysis failed",
+      res.status
     );
   }
 
   return {
-    correctedCode: data.correctedCode ?? code,
-    explanation: data.explanation ?? "",
-    modeOutput: data.modeOutput ?? "",
-    errors: Array.isArray(data.errors) ? data.errors : [],
-    degraded: Boolean(data.degraded),
+    correctedCode: data.correctedCode || code,
+    explanation: data.explanation || "",
+    modeOutput: data.modeOutput || "",
+    errors: data.errors || [],
+    degraded: data.degraded || false,
   };
 };
 
 export const checkAiHealth = async () => {
-  const response = await fetch(AI_HEALTH_URL);
-  if (!response.ok) {
-    throw new Error("AI health check failed");
-  }
-  return response.json();
+  const res = await fetch(AI_HEALTH_URL);
+  if (!res.ok) throw new Error("AI health failed");
+  return res.json();
 };

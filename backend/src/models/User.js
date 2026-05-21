@@ -5,6 +5,12 @@ const userSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
+    role: { type: String, enum: ['Admin', 'Reviewer', 'Developer'], default: 'Developer' },
+    apiKey: { type: String, unique: true, sparse: true },
+    customRules: { type: [String], default: [] },
+    githubToken: { type: String },
+    githubUser: { type: String },
+    currentMode: { type: String, default: 'student' }
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

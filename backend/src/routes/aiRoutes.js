@@ -1,6 +1,6 @@
 import express from "express";
 import { analyzeContent } from "../services/aiService.js";
-import { geminiService } from "../services/geminiService.js";
+import  geminiService  from "../services/geminiService.js";
 import History from "../models/History.js";
 
 const router = express.Router();

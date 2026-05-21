@@ -1,9 +1,16 @@
 import express from "express";
+import { protect } from "../middleware/authMiddleware.js";
+import {
+  getUserProfile,
+  updateUserProfile,
+  deleteUserProfile,
+} from "../controllers/userController.js";
 
 const router = express.Router();
 
-router.get("/", (req, res) => {
-  res.json({ message: "User route working" });
-});
+// User profile routes
+router.get("/profile", protect, getUserProfile);
+router.put("/profile", protect, updateUserProfile);
+router.delete("/profile", protect, deleteUserProfile);
 
 export default router;

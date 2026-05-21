@@ -1,76 +1,70 @@
 import axios from "axios";
-import geminiService from "./geminiService.js";
 
-/* ================================
-   PROMPT BUILDER (FINAL FIX)
-================================ */
+/* =========================
+   MODE NORMALIZATION
+========================= */
+export const normalizeMode = (mode) => {
+  if (!mode) return "developer";
+
+  const lower = String(mode).toLowerCase();
+
+  if (lower.includes("student")) return "student";
+  if (lower.includes("interview")) return "interviewer";
+
+  return "developer";
+};
+
+/* =========================
+   PROMPT BUILDER
+========================= */
 const buildPrompt = (code, mode) => {
-  const base = `
-You are a STRICT AI CODE ANALYZER.
+  if (mode === "student") {
+    return `
+You are an expert programming teacher.
 
-YOU MUST RETURN ONLY VALID JSON.
+Return ONLY valid JSON.
 
-FORMAT:
+OUTPUT FORMAT:
 {
+  "steps": [],
+  "mistakes": [],
+  "tips": [],
   "correctedCode": "",
-  "explanation": "",
-  "modeOutput": "",
-  "errors": []
+  "explanation": ""
 }
 
-NO extra text. NO markdown. NO paragraphs outside JSON.
-`;
-
-  const m = (mode || "developer").toLowerCase();
-
-  if (m === "student") {
-    return `
-${base}
-
-MODE: STUDENT
-
-- Fix the code
-- Explain simply
-- List mistakes clearly in errors array
+RULES:
+- Explain step by step
+- Very simple beginner explanation
+- Must always fill steps, mistakes, tips
 
 CODE:
 ${code}
 `;
   }
 
-  if (m === "interviewer" || m === "interview") {
+  if (mode === "interviewer") {
     return `
-${base}
+You are a FAANG interviewer.
 
-MODE: INTERVIEWER
+Return ONLY valid JSON.
 
-IMPORTANT RULES:
-- correctedCode MUST be ""
-- explanation = 1 line only
+OUTPUT FORMAT:
+{
+  "questions": [
+    {
+      "question": "",
+      "answer": "",
+      "difficulty": "easy|medium|hard"
+    }
+  ],
+  "explanation": ""
+}
 
-modeOutput MUST be EXACT:
-
-INTERVIEW QUESTIONS:
-1. ...
-2. ...
-3. ...
-4. ...
-5. ...
-
-EXPECTED ANSWERS:
-1. ...
-2. ...
-3. ...
-4. ...
-5. ...
-
-FOLLOW-UP QUESTIONS:
-- ...
-- ...
-
-EDGE CASES:
-- ...
-- ...
+RULES:
+- Generate 8–10 questions
+- Include answers
+- Mix coding + theory + debugging
 
 CODE:
 ${code}
@@ -78,100 +72,139 @@ ${code}
   }
 
   return `
-${base}
+You are a senior SaaS software engineer.
 
-MODE: DEVELOPER
+Return ONLY valid JSON.
 
-modeOutput MUST include:
+OUTPUT FORMAT:
+{
+  "bugs": [],
+  "securityIssues": [],
+  "performanceIssues": [],
+  "bestPractices": [],
+  "correctedCode": "",
+  "score": 0,
+  "explanation": ""
+}
 
-BUGS:
-- list issues
-
-IMPROVEMENTS:
-- performance
-- security
-- clean code
-
-TOOLS:
-- React Query
-- Redux Toolkit / Zustand
-- Docker
-- Redis
-- CI/CD (GitHub Actions)
-- Jest / Cypress
-- Pino/Winston logging
-
-ARCHITECTURE:
-- how to scale system
+RULES:
+- Real production-level review
+- Think like senior engineer at Google/Meta
 
 CODE:
 ${code}
 `;
 };
 
-/* ================================
-   GEMINI CALL
-================================ */
-const analyzeWithGemini = async (prompt) => {
-  const text = await geminiService(prompt);
-  return JSON.parse(text);
+/* =========================
+   CLEAN JSON
+========================= */
+const extractJSON = (text) => {
+  try {
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+
+    if (start === -1 || end === -1) return null;
+
+    return JSON.parse(text.slice(start, end + 1));
+  } catch (err) {
+    console.error("JSON parse error:", err.message);
+    return null;
+  }
 };
 
-/* ================================
-   OPENAI CALL (optional fallback)
-================================ */
-const analyzeWithOpenAI = async (prompt) => {
-  const resp = await axios.post(
-    "https://api.openai.com/v1/chat/completions",
+/* =========================
+   OPENROUTER CALL
+========================= */
+const callOpenRouter = async (prompt) => {
+  const res = await axios.post(
+    "https://openrouter.ai/api/v1/chat/completions",
     {
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      model: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini",
       messages: [
-        { role: "system", content: "Return ONLY JSON." },
+        {
+          role: "system",
+          content: "Return ONLY valid JSON. No markdown. No explanation outside JSON.",
+        },
         { role: "user", content: prompt },
       ],
-      temperature: 0,
-      response_format: { type: "json_object" },
+      temperature: 0.2,
     },
     {
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER || "http://localhost:5173",
       },
     }
   );
 
-  return JSON.parse(resp.data.choices[0].message.content);
+  const content = res.data.choices?.[0]?.message?.content;
+  if (!content) return null;
+
+  return extractJSON(content);
 };
 
-/* ================================
-   MAIN FUNCTION
-================================ */
-export const analyzeContent = async (code, mode) => {
-  if (!code?.trim()) throw new Error("Code is required");
+/* =========================
+   FALLBACK
+========================= */
+const fallback = (code, mode) => ({
+  correctedCode: code,
+  explanation: "AI service unavailable.",
+  steps: [],
+  mistakes: [],
+  tips: [],
+  questions: [],
+  bugs: [],
+  securityIssues: [],
+  performanceIssues: [],
+  bestPractices: [],
+  score: 0,
+  mode,
+  degraded: true,
+});
 
-  const prompt = buildPrompt(code, mode);
+/* =========================
+   MAIN FUNCTION
+========================= */
+export const analyzeContent = async (code, mode) => {
+  const finalMode = normalizeMode(mode);
 
   try {
-    if (process.env.OPENAI_API_KEY) {
-      return await analyzeWithOpenAI(prompt);
+    if (!process.env.OPENROUTER_API_KEY) {
+      return fallback(code, finalMode);
     }
 
-    if (process.env.GEMINI_API_KEY) {
-      return await analyzeWithGemini(prompt);
-    }
+    const prompt = buildPrompt(code, finalMode);
+    const ai = await callOpenRouter(prompt);
+
+    if (!ai) return fallback(code, finalMode);
 
     return {
-      correctedCode: code,
-      explanation: "No AI key found",
-      modeOutput: "Offline mode",
-      errors: ["No API keys"],
+      correctedCode: ai.correctedCode || code,
+
+      explanation: ai.explanation || "No explanation generated.",
+
+      steps: ai.steps || [],
+      mistakes: ai.mistakes || [],
+      tips: ai.tips || [],
+
+      questions: ai.questions || [],
+
+      bugs: ai.bugs || [],
+      securityIssues: ai.securityIssues || [],
+      performanceIssues: ai.performanceIssues || [],
+      bestPractices: ai.bestPractices || [],
+
+      score: ai.score || 0,
+
+      mode: finalMode,
+      degraded: false,
     };
   } catch (err) {
-    return {
-      correctedCode: code,
-      explanation: "AI failed",
-      modeOutput: "Fallback mode",
-      errors: [err.message],
-    };
+    console.error("AI ERROR:", err.message);
+    return fallback(code, finalMode);
   }
 };

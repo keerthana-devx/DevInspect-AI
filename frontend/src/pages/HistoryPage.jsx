@@ -1,234 +1,268 @@
-import React, { useState, useEffect } from 'react';
-import { Helmet } from 'react-helmet';
-import { motion } from 'framer-motion';
-import { Search, History as HistoryIcon, LayoutGrid, List, Trash2 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext.jsx';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
-import { getReviews, deleteReview, clearAllReviews, normalizeMode } from '@/lib/historyStorage';
-import ReviewDetailModal from '@/components/ReviewDetailModel.jsx';
+import React, { useEffect, useState } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Search,
+  Trash2,
+  Bookmark,
+  Calendar,
+  Code,
+  Sliders,
+  ExternalLink,
+  BookOpen,
+  Filter,
+  CheckCircle,
+  X
+} from 'lucide-react';
+import {
+  getReviewsFromServer,
+  deleteReviewFromServer,
+  clearAllReviewsFromServer,
+  toggleBookmarkOnServer
+} from '../lib/historyStorage';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
 
 const HistoryPage = () => {
-  const { currentUser } = useAuth();
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filterMode, setFilterMode] = useState('all');
-  const [viewType, setViewType] = useState('table');
-  const [selectedReview, setSelectedReview] = useState(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedLanguage, setSelectedLanguage] = useState('all');
+  const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
+  const [activeReview, setActiveReview] = useState(null);
+
+  const fetchHistory = async () => {
+    setLoading(true);
+    try {
+      const data = await getReviewsFromServer();
+      setReviews(data);
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to load review history');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        const data = getReviews();
-        setReviews(data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchHistory();
   }, []);
 
-  const filteredReviews = reviews.filter(r => {
-    const matchSearch =
-  (r?.language || "")
-    .toLowerCase()
-    .includes(
-      search.toLowerCase()
-    );
-    const matchMode = filterMode === 'all' || normalizeMode(r.mode) === filterMode;
-    return matchSearch && matchMode;
-  });
+  const handleToggleBookmark = async (id) => {
+    try {
+      await toggleBookmarkOnServer(id);
+      // Sync list
+      const updated = reviews.map(r => r.id === id ? { ...r, isBookmarked: !r.isBookmarked } : r);
+      setReviews(updated);
+      toast.success('Bookmark state updated');
+    } catch {
+      toast.error('Failed to update bookmark');
+    }
+  };
 
-  const handleDelete = (id) => {
-    if (deleteReview(id)) {
-      setReviews(getReviews());
-      toast.success('Review deleted successfully');
-    } else {
+  const handleDelete = async (id) => {
+    try {
+      await deleteReviewFromServer(id);
+      setReviews(prev => prev.filter(r => r.id !== id));
+      if (activeReview?.id === id) setActiveReview(null);
+      toast.success('Review deleted');
+    } catch {
       toast.error('Failed to delete review');
     }
   };
 
-  const handleClearAll = () => {
-    if (clearAllReviews()) {
+  const handleClearAll = async () => {
+    if (!window.confirm('Are you sure you want to delete all review history?')) return;
+    try {
+      await clearAllReviewsFromServer();
       setReviews([]);
-      toast.success('All reviews cleared');
-    } else {
-      toast.error('Failed to clear reviews');
+      setActiveReview(null);
+      toast.success('History cleared successfully!');
+    } catch {
+      toast.error('Failed to clear history');
     }
   };
 
-  const openReview = (review) => {
-    setSelectedReview(review);
-    setDetailOpen(true);
-  };
+  // Filter reviews
+  const filteredReviews = reviews.filter(r => {
+    const matchesSearch = 
+      r.input.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      r.explanation.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesLang = selectedLanguage === 'all' || r.language.toLowerCase() === selectedLanguage.toLowerCase();
+    const matchesBookmark = !showBookmarkedOnly || r.isBookmarked;
 
-  const getSeverityBadge = (sev) => {
-    const s = sev?.toLowerCase() || 'low';
-    if (s === 'critical') return <Badge className="bg-destructive hover:bg-destructive text-white">Critical</Badge>;
-    if (s === 'high') return <Badge className="bg-orange-500 hover:bg-orange-500 text-white">High</Badge>;
-    if (s === 'medium') return <Badge className="bg-yellow-500 hover:bg-yellow-500 text-black">Medium</Badge>;
-    return <Badge className="bg-green-500 hover:bg-green-500 text-white">Low</Badge>;
-  };
+    return matchesSearch && matchesLang && matchesBookmark;
+  });
 
   return (
     <>
-      <Helmet><title>Review History | DevInspect AI</title></Helmet>
-      <div className="w-full min-h-screen py-8">
+      <Helmet>
+        <title>Review History | DevInspectAI</title>
+      </Helmet>
+
+      <div className="w-full min-h-screen py-8 text-foreground bg-background">
         <div className="container mx-auto px-4 lg:px-8">
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4"
-          >
+          
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
             <div>
-              <h1 className="text-4xl font-extrabold mb-2 text-gradient">Review History</h1>
-              <p className="text-muted-foreground">Access and reference your past analyses.</p>
+              <h1 className="text-3xl font-extrabold text-gradient mb-2">Review History</h1>
+              <p className="text-muted-foreground">Search and manage all past AI code review runs and reports.</p>
             </div>
             
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="relative flex-1 md:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search language..." 
-                  className="input-premium pl-9 h-10"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              <Select value={filterMode} onValueChange={setFilterMode}>
-                <SelectTrigger className="w-[140px] h-10 input-premium">
-                  <SelectValue placeholder="Filter Mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Modes</SelectItem>
-                  <SelectItem value="student">Student</SelectItem>
-                  <SelectItem value="interviewer">Interviewer</SelectItem>
-                  <SelectItem value="developer">Developer</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="hidden sm:flex bg-card/50 backdrop-blur-sm rounded-xl p-1 border border-border/30">
-                <Button variant="ghost" size="icon" onClick={()=>setViewType('table')} className={`h-8 w-8 rounded-lg ${viewType==='table'?'bg-primary/20 text-primary':''}`}><List className="w-4 h-4" /></Button>
-                <Button variant="ghost" size="icon" onClick={()=>setViewType('grid')} className={`h-8 w-8 rounded-lg ${viewType==='grid'?'bg-primary/20 text-primary':''}`}><LayoutGrid className="w-4 h-4" /></Button>
-              </div>
-              {reviews.length > 0 && (
-                <Button variant="outline" size="icon" onClick={handleClearAll} className="h-10 w-10 rounded-xl border-border/50 hover:bg-destructive/10 hover:text-destructive" title="Clear All">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
+            {reviews.length > 0 && (
+              <Button onClick={handleClearAll} variant="outline" className="border-destructive/30 hover:bg-destructive/10 hover:text-destructive h-10 rounded-xl font-bold">
+                <Trash2 className="w-4 h-4 mr-2" /> Clear All History
+              </Button>
+            )}
+          </div>
+
+          {/* Filter Bar */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-8 bg-muted/20 p-4 rounded-2xl border border-border/30">
+            <div className="md:col-span-6 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search history content or summary..."
+                className="pl-10 h-11 text-sm bg-background border-border/30 rounded-xl"
+              />
             </div>
-          </motion.div>
+
+            <div className="md:col-span-3">
+              <select
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="w-full h-11 px-3 text-sm bg-background border border-border/30 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="all">All Languages</option>
+                <option value="javascript">JavaScript</option>
+                <option value="python">Python</option>
+                <option value="java">Java</option>
+                <option value="cpp">C++</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-3 flex items-center justify-center">
+              <button
+                onClick={() => setShowBookmarkedOnly(!showBookmarkedOnly)}
+                className={`w-full h-11 px-4 rounded-xl flex items-center justify-center gap-2 border text-sm font-semibold transition-all ${
+                  showBookmarkedOnly 
+                    ? 'bg-primary/10 border-primary/30 text-primary' 
+                    : 'bg-background border-border/30 text-muted-foreground'
+                }`}
+              >
+                <Bookmark className={`w-4 h-4 ${showBookmarkedOnly ? 'fill-current' : ''}`} /> Bookmarked Only
+              </button>
+            </div>
+          </div>
 
           {loading ? (
-            <div className="space-y-4">
-              {[1,2,3,4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl bg-muted/30" />)}
+            <div className="flex items-center justify-center min-h-[300px]">
+              <p className="text-muted-foreground animate-pulse">Loading saved reviews...</p>
             </div>
-          ) : filteredReviews.length === 0 ? (
-            <motion.div initial={{opacity:0}} animate={{opacity:1}} className="card-glow bg-gradient-to-br from-white/40 to-white/20 backdrop-blur-xl border border-white/50 rounded-3xl p-16 flex flex-col items-center justify-center text-center">
-              <motion.div 
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="w-20 h-20 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full flex items-center justify-center mb-6 border border-white/30"
-              >
-                <HistoryIcon className="w-10 h-10 text-primary animate-pulse" />
-              </motion.div>
-              <h3 className="text-xl font-bold mb-2 text-gradient">No history found</h3>
-              <p className="text-muted-foreground">You haven't run any code reviews that match this filter.</p>
-            </motion.div>
-          ) : viewType === 'table' ? (
-            <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="card-glass p-0 overflow-hidden rounded-3xl">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow>
-                      <TableHead className="py-4 font-bold text-foreground/80">Date</TableHead>
-                      <TableHead className="font-bold text-foreground/80">Language</TableHead>
-                      <TableHead className="font-bold text-foreground/80">Mode</TableHead>
-                      <TableHead className="font-bold text-foreground/80">AI Score</TableHead>
-                      <TableHead className="font-bold text-foreground/80">Issues</TableHead>
-                      <TableHead className="text-right font-bold text-foreground/80">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredReviews.map((r, i) => (
-                      <motion.tr 
-                        key={r.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="hover:bg-muted/20 transition-colors border-b border-border/20"
-                      >
-                        <TableCell className="py-4 font-medium">{new Date(r.timestamp).toLocaleDateString()}</TableCell>
-                        <TableCell className="capitalize">{r.language}</TableCell>
-                        <TableCell><Badge variant="secondary" className="capitalize bg-secondary/20 text-secondary border border-secondary/30">{r.mode}</Badge></TableCell>
-                        <TableCell className="font-bold text-gradient">{r.aiScore || 0}/100</TableCell>
-                        <TableCell>{r.issues?.length || 0}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-2 justify-end">
-                            <Button variant="outline" size="sm" className="font-semibold rounded-xl border-border/50 hover:bg-muted/50" onClick={() => openReview(r)}>View</Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)} className="h-8 w-8 rounded-lg hover:bg-destructive/10 hover:text-destructive">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </motion.tr>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </motion.div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredReviews.map((r, i) => (
-                <motion.div 
-                  key={r.id} 
-                  initial={{opacity:0, scale:0.95}} 
-                  animate={{opacity:1, scale:1}} 
-                  transition={{delay: i*0.05}}
-                  whileHover={{ scale: 1.03, y: -5 }}
-                  className="card-glow bg-gradient-to-br from-white/40 to-white/20 backdrop-blur-xl border border-white/50 rounded-2xl p-6 hover:border-primary/30 group cursor-pointer"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <Badge variant="secondary" className="capitalize bg-secondary/20 text-secondary border border-secondary/30">{r.mode}</Badge>
-                    <span className="text-xs text-muted-foreground font-medium">{new Date(r.timestamp).toLocaleDateString()}</span>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              
+              {/* Reviews List - Column 6 */}
+              <div className="lg:col-span-6 space-y-4 max-h-[600px] overflow-y-auto pr-1">
+                {filteredReviews.length === 0 ? (
+                  <div className="card-glass p-8 text-center text-muted-foreground">
+                    <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                    <p>No matching reviews found in database history.</p>
                   </div>
-                  <h3 className="text-xl font-bold capitalize mb-1 text-gradient">{r.language}</h3>
-                  <div className="flex gap-4 my-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground font-bold uppercase mb-1">AI Score</p>
-                      <p className="font-bold text-lg text-gradient">{r.aiScore || 0}</p>
+                ) : (
+                  filteredReviews.map((r) => (
+                    <div
+                      key={r.id}
+                      onClick={() => setActiveReview(r)}
+                      className={`card-glass p-4 rounded-2xl border transition-all cursor-pointer flex justify-between items-center gap-4 ${
+                        activeReview?.id === r.id 
+                          ? 'border-primary bg-primary/5' 
+                          : 'border-border/30 hover:border-primary/50'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <span className="text-xs font-bold bg-primary/10 text-primary px-2.5 py-0.5 rounded-md capitalize">{r.language}</span>
+                          <span className="text-xs font-semibold text-muted-foreground capitalize">{r.mode} mode</span>
+                        </div>
+                        
+                        <p className="text-sm font-semibold text-foreground/90 truncate mb-1">{r.explanation}</p>
+                        
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" /> {new Date(r.timestamp).toLocaleDateString()} at {new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => handleToggleBookmark(r.id)} className="p-2 hover:bg-muted rounded-xl transition-all">
+                          <Bookmark className={`w-4 h-4 ${r.isBookmarked ? 'text-primary fill-current' : 'text-muted-foreground'}`} />
+                        </button>
+                        <button onClick={() => handleDelete(r.id)} className="p-2 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-xl transition-all">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground font-bold uppercase mb-1">Issues</p>
-                      <p className="font-bold text-lg text-gradient">{r.issues?.length || 0}</p>
+                  ))
+                )}
+              </div>
+
+              {/* Selected Review Details Panel - Column 6 */}
+              <div className="lg:col-span-6">
+                {!activeReview ? (
+                  <div className="card-glass p-8 text-center text-muted-foreground min-h-[300px] flex flex-col justify-center items-center">
+                    <Code className="w-12 h-12 mb-3 opacity-30" />
+                    <p>Select a history item from the list to display details, suggestions, and diff code.</p>
+                  </div>
+                ) : (
+                  <div className="card-glass p-6 rounded-3xl space-y-6 animate-fade-in relative">
+                    <button onClick={() => setActiveReview(null)} className="absolute right-4 top-4 text-muted-foreground hover:text-foreground">
+                      <X className="w-5 h-5" />
+                    </button>
+
+                    <div className="border-b border-border/30 pb-4">
+                      <h3 className="font-extrabold text-xl mb-1 capitalize text-gradient">{activeReview.language} Analysis</h3>
+                      <p className="text-xs text-muted-foreground capitalize">Saved: {new Date(activeReview.timestamp).toLocaleString()} · Mode: {activeReview.mode}</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Summary Explanation</h4>
+                        <p className="text-sm bg-muted/40 p-4 rounded-xl border border-border/20 leading-relaxed">{activeReview.explanation}</p>
+                      </div>
+
+                      <div>
+                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Refactored Suggestion</h4>
+                        <div className="rounded-xl border border-border/30 overflow-hidden font-mono text-xs max-h-[220px] overflow-y-auto bg-muted/20">
+                          <pre className="p-3 text-green-500 overflow-x-auto whitespace-pre">{activeReview.correctedCode || '// No corrected code suggestion'}</pre>
+                        </div>
+                      </div>
+
+                      {activeReview.errors.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Issues ({activeReview.errors.length})</h4>
+                          <div className="space-y-2">
+                            {activeReview.errors.map((e, idx) => (
+                              <div key={idx} className="p-3 bg-muted/40 rounded-xl border border-border/20 text-xs">
+                                <div className="flex justify-between items-center mb-1">
+                                  <strong className="text-destructive font-bold">{e.severity} Severity</strong>
+                                  <span className="text-[10px] text-muted-foreground">Line {e.line || 'All'} · {e.category}</span>
+                                </div>
+                                <p className="text-foreground/90">{e.message}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-2 mt-2">
-                    <Button variant="secondary" className="flex-1 btn-secondary rounded-xl font-semibold" onClick={() => openReview(r)}>View</Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)} className="h-10 w-10 rounded-xl hover:bg-destructive/10 hover:text-destructive">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </motion.div>
-              ))}
+                )}
+              </div>
+
             </div>
           )}
         </div>
       </div>
-
-      <ReviewDetailModal
-        review={selectedReview}
-        isOpen={detailOpen}
-        onClose={() => setDetailOpen(false)}
-      />
     </>
   );
 };

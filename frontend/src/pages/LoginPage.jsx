@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
+import { Helmet } from 'react-helmet-async';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Sparkles, Mail, Lock, Eye, EyeOff, Github, Chrome } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
@@ -42,7 +42,7 @@ const LoginPage = () => {
   return (
     <>
       <Helmet>
-        <title>Sign In | DevInspect AI</title>
+        <title>Sign In | DevInspectAI</title>
       </Helmet>
 
       <div className="min-h-screen flex w-full bg-animated overflow-hidden">
@@ -126,7 +126,7 @@ const LoginPage = () => {
                 <Sparkles className="h-7 w-7 text-primary animate-pulse" />
               </div>
               <div>
-                <span className="font-bold text-3xl tracking-tight text-gradient">DevInspect AI</span>
+               <span className="font-bold text-3xl tracking-tight text-gradient">DevInspectAI</span>
                 <p className="text-sm text-muted-foreground/80 mt-1">Premium Code Analysis</p>
               </div>
             </motion.div>

@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
+import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { GraduationCap, Users, Code2, CheckCircle2, Loader2, AlertCircle, RefreshCcw } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import pb from '@/lib/pocketbaseClient.js';
-
 const ModeSelectionPage = () => {
   const navigate = useNavigate();
   const { currentMode, switchMode, currentUser } = useAuth();
@@ -17,25 +15,11 @@ const ModeSelectionPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // (4) Ensure the mode selection persists by fetching the current mode from the database on component mount
+  // (4) Ensure the mode selection persists from the user profile data
   useEffect(() => {
-    const fetchSavedMode = async () => {
-      if (!currentUser?.id) return;
-      try {
-        const userRec = await pb.collection('users').getOne(currentUser.id, { $autoCancel: false });
-        if (userRec.currentMode) {
-          setSelectedMode(userRec.currentMode);
-          console.log('Fetched persisted mode from database:', userRec.currentMode);
-        }
-      } catch (err) {
-        console.error('Failed to fetch initial mode from database:', err);
-      }
-    };
-    
-    // Only fetch if context mode is missing or to double-check consistency
-    if (!currentMode) {
-      fetchSavedMode();
-    } else {
+    if (currentUser?.currentMode) {
+      setSelectedMode(currentUser.currentMode);
+    } else if (currentMode) {
       setSelectedMode(currentMode);
     }
   }, [currentUser, currentMode]);
@@ -97,7 +81,7 @@ const ModeSelectionPage = () => {
       // Calls context method which saves to user_modes and users collections
       await switchMode(selectedMode);
       
-      console.log('Mode saved successfully to PocketBase.');
+      console.log('Mode saved successfully to backend.');
       
       // Briefly show success before navigation
       toast.success('Workspace mode saved successfully!', { duration: 2000 });
@@ -117,7 +101,7 @@ const ModeSelectionPage = () => {
   return (
     <>
       <Helmet>
-        <title>Select Workspace Mode | DevInspect AI</title>
+        <title>Select Workspace Mode | DevInspectAI</title>
       </Helmet>
 
       <div className="min-h-screen bg-background py-12 px-4 flex flex-col items-center">

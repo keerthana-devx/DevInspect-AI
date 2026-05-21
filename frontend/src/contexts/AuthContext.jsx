@@ -1,12 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import PocketBase from "pocketbase";
 import {
   AUTH_LOGIN_URL,
   AUTH_REGISTER_URL,
+  USER_PROFILE_URL,
 } from "@/lib/apiConfig";
 import { normalizeMode } from "@/lib/historyStorage";
-
-const pb = new PocketBase("http://127.0.0.1:8090");
 
 const AuthContext = createContext();
 
@@ -33,26 +31,68 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    try {
-      const storedUser = loadStoredUser();
-      if (storedUser) {
-        setCurrentUser(storedUser);
-      } else if (pb.authStore.isValid) {
-        setCurrentUser(pb.authStore.model);
+    const initAuth = async () => {
+      try {
+        const storedUser = loadStoredUser();
+        const token = localStorage.getItem("devinspect-token");
+        
+        if (storedUser && token) {
+          setCurrentUser(storedUser);
+          
+          // Sync profile from server
+          try {
+            const resp = await fetch(USER_PROFILE_URL, {
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              }
+            });
+            if (resp.ok) {
+              const freshUser = await resp.json();
+              const mappedUser = {
+                id: freshUser._id,
+                email: freshUser.email,
+                name: freshUser.name,
+                role: freshUser.role || 'Developer',
+                customRules: freshUser.customRules || [],
+                apiKey: freshUser.apiKey || '',
+                githubUser: freshUser.githubUser || '',
+                currentMode: freshUser.currentMode || 'developer',
+                created: freshUser.createdAt,
+              };
+              setCurrentUser(mappedUser);
+              localStorage.setItem("devinspect-user", JSON.stringify(mappedUser));
+              localStorage.setItem("devinspect-mode", mappedUser.currentMode);
+            }
+          } catch (e) {
+            console.warn("Could not sync profile from server:", e.message);
+          }
+        }
+        
+        const savedMode = localStorage.getItem("devinspect-mode");
+        if (savedMode) {
+          setCurrentMode(normalizeMode(savedMode));
+        }
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+      } finally {
+        setInitialLoading(false);
       }
+    };
 
-      const savedMode = localStorage.getItem("devinspect-mode");
-      if (savedMode) {
-        setCurrentMode(normalizeMode(savedMode));
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setInitialLoading(false);
-    }
+    initAuth();
   }, []);
 
-  const loginWithBackend = async (email, password) => {
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("devinspect-token");
+    return {
+      "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    };
+  };
+
+  const login = async (email, password) => {
+    setError("");
     const response = await fetch(AUTH_LOGIN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -64,23 +104,28 @@ export const AuthProvider = ({ children }) => {
       throw new Error(data.message || "Invalid credentials");
     }
 
-    const user = {
+    const mappedUser = {
       id: data._id,
-      email,
+      email: data.email || email,
       name: data.name || email.split("@")[0],
+      role: data.role || 'Developer',
+      customRules: data.customRules || [],
+      apiKey: data.apiKey || '',
+      githubUser: data.githubUser || '',
+      currentMode: data.currentMode || 'developer',
       created: new Date().toISOString(),
     };
 
-    persistSession(user, data.token);
-    setCurrentUser(user);
+    persistSession(mappedUser, data.token);
+    setCurrentUser(mappedUser);
+    setCurrentMode(normalizeMode(mappedUser.currentMode));
+    localStorage.setItem("devinspect-mode", mappedUser.currentMode);
 
-    const savedMode = localStorage.getItem("devinspect-mode");
-    setCurrentMode(normalizeMode(savedMode || "student"));
-
-    return user;
+    return mappedUser;
   };
 
-  const signupWithBackend = async (email, password, name) => {
+  const signup = async (email, password, name) => {
+    setError("");
     const registerResponse = await fetch(AUTH_REGISTER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -92,76 +137,28 @@ export const AuthProvider = ({ children }) => {
       throw new Error(registerData.message || "Registration failed");
     }
 
-    return loginWithBackend(email, password);
+    return login(email, password);
   };
 
-  const login = async (email, password) => {
+  const loginWithGitSimulated = async (provider) => {
     setError("");
-    try {
-      return await loginWithBackend(email, password);
-    } catch (backendErr) {
-      try {
-        const authData = await pb
-          .collection("users")
-          .authWithPassword(email, password);
+    const mockEmail = `${provider}_developer@example.com`;
+    const mockName = `${provider.charAt(0).toUpperCase() + provider.slice(1)} Dev`;
+    const mockPassword = "git-oauth-simulated-secure-pass";
 
-        setCurrentUser(authData.record);
-        const savedMode = localStorage.getItem("devinspect-mode");
-        setCurrentMode(normalizeMode(savedMode || "student"));
-        return authData.record;
-      } catch {
-        const demoUser = {
-          id: "demo-user",
-          email,
-          name: email.split("@")[0] || "Demo User",
-          created: new Date().toISOString(),
-        };
-        persistSession(demoUser, null);
-        setCurrentUser(demoUser);
-        setCurrentMode(normalizeMode("student"));
-        localStorage.setItem("devinspect-mode", "student");
-        return demoUser;
-      }
-    }
-  };
-
-  const signup = async (email, password, name) => {
-    setError("");
     try {
-      return await signupWithBackend(email, password, name);
-    } catch (backendErr) {
+      return await login(mockEmail, mockPassword);
+    } catch {
       try {
-        await pb.collection("users").create({
-          email,
-          password,
-          passwordConfirm: password,
-          name,
-        });
-        const authData = await pb
-          .collection("users")
-          .authWithPassword(email, password);
-        setCurrentUser(authData.record);
-        setCurrentMode("student");
-        localStorage.setItem("devinspect-mode", "student");
-        return authData.record;
-      } catch {
-        const demoUser = {
-          id: "demo-user",
-          email,
-          name: name || email.split("@")[0],
-          created: new Date().toISOString(),
-        };
-        persistSession(demoUser, null);
-        setCurrentUser(demoUser);
-        setCurrentMode("student");
-        localStorage.setItem("devinspect-mode", "student");
-        return demoUser;
+        await signup(mockEmail, mockPassword, mockName);
+        return await login(mockEmail, mockPassword);
+      } catch (err) {
+        throw new Error(`Simulated Git OAuth failed: ${err.message}`);
       }
     }
   };
 
   const logout = () => {
-    pb.authStore.clear();
     setCurrentUser(null);
     setCurrentMode(null);
     localStorage.removeItem("devinspect-token");
@@ -171,23 +168,98 @@ export const AuthProvider = ({ children }) => {
 
   const switchMode = async (mode) => {
     const normalized = normalizeMode(mode);
+    
+    // Update local state immediately
     setCurrentMode(normalized);
     localStorage.setItem("devinspect-mode", normalized);
+
+    if (currentUser) {
+      try {
+        const token = localStorage.getItem("devinspect-token");
+        const resp = await fetch(USER_PROFILE_URL, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({ currentMode: normalized }),
+        });
+
+        if (resp.ok) {
+          const freshUser = await resp.json();
+          const updatedUser = {
+            ...currentUser,
+            currentMode: freshUser.currentMode || normalized,
+          };
+          setCurrentUser(updatedUser);
+          localStorage.setItem("devinspect-user", JSON.stringify(updatedUser));
+        }
+      } catch (e) {
+        console.warn("Could not persist mode to backend:", e.message);
+      }
+    }
+
+    return normalized;
   };
 
-  const requestPasswordReset = async (email) => {
-    try {
-      await pb.collection("users").requestPasswordReset(email);
-    } catch (err) {
-      console.error(err);
+  const updateProfileOnBackend = async (updates) => {
+    const token = localStorage.getItem("devinspect-token");
+    const resp = await fetch(USER_PROFILE_URL, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify(updates),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ message: "Failed to update profile" }));
+      throw new Error(err.message || "Failed to update profile");
     }
+
+    const freshUser = await resp.json();
+    const mappedUser = {
+      id: freshUser._id,
+      email: freshUser.email,
+      name: freshUser.name,
+      role: freshUser.role || 'Developer',
+      customRules: freshUser.customRules || [],
+      apiKey: freshUser.apiKey || '',
+      githubUser: freshUser.githubUser || '',
+      currentMode: freshUser.currentMode || currentMode,
+      created: freshUser.createdAt,
+    };
+    setCurrentUser(mappedUser);
+    localStorage.setItem("devinspect-user", JSON.stringify(mappedUser));
+    
+    if (freshUser.currentMode) {
+      setCurrentMode(normalizeMode(freshUser.currentMode));
+      localStorage.setItem("devinspect-mode", freshUser.currentMode);
+    }
+    
+    return mappedUser;
+  };
+
+  const deleteAccountOnBackend = async () => {
+    const token = localStorage.getItem("devinspect-token");
+    const resp = await fetch(USER_PROFILE_URL, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ message: "Failed to delete account" }));
+      throw new Error(err.message || "Failed to delete account");
+    }
+
+    logout();
   };
 
   const updateUserPreferences = async (preferences) => {
-    localStorage.setItem(
-      "devinspect-preferences",
-      JSON.stringify(preferences)
-    );
+    localStorage.setItem("devinspect-preferences", JSON.stringify(preferences));
   };
 
   return (
@@ -200,10 +272,13 @@ export const AuthProvider = ({ children }) => {
         error,
         login,
         signup,
+        loginWithGitSimulated,
         logout,
         switchMode,
-        requestPasswordReset,
+        updateProfileOnBackend,
+        deleteAccountOnBackend,
         updateUserPreferences,
+        getAuthHeaders,
       }}
     >
       {children}

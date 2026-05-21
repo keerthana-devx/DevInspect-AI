@@ -2,7 +2,6 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { User, Settings, LogOut, Menu, X, Sparkles, Sun, Moon } from 'lucide-react';
 import { motion } from 'framer-motion';
-import pb from '@/lib/pocketbaseClient.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useTheme } from '@/contexts/ThemeContext.jsx';
 import { Button } from '@/components/ui/button';
@@ -66,7 +65,7 @@ const Header = ({ onMenuToggle, isMobileMenuOpen }) => {
             >
               <Sparkles className="h-5 w-5 text-white animate-pulse" />
             </motion.div>
-            <span className="font-bold text-xl hidden sm:inline tracking-tight text-gradient">DevInspect AI</span>
+            <span className="font-bold text-xl hidden sm:inline tracking-tight text-gradient">DevInspectAI</span>
           </Link>
           
           {currentMode && (
@@ -106,19 +105,11 @@ const Header = ({ onMenuToggle, isMobileMenuOpen }) => {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-xl h-10 w-10 overflow-hidden ring-2 ring-transparent hover:ring-primary/30 transition-all glow-effect">
-                {currentUser?.avatar ? (
-                  <img
-                    src={pb.files.getUrl(currentUser, currentUser.avatar)}
-                    alt={currentUser.name || 'User'}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-                    <span className="text-sm font-bold text-primary">
-                      {currentUser?.name?.charAt(0).toUpperCase() || 'U'}
-                    </span>
-                  </div>
-                )}
+                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
+                  <span className="text-sm font-bold text-primary">
+                    {currentUser?.name?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl border-border/30 shadow-xl glass">

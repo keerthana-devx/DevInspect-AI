@@ -1,7 +1,7 @@
 // Using ModeSelectionPage as base since they are nearly identical structurally per request, but with an AlertDialog
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
+import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { GraduationCap, Users, Code2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
@@ -81,7 +81,7 @@ const SwitchModePage = () => {
 
   return (
     <>
-      <Helmet><title>Switch Workspace | DevInspect AI</title></Helmet>
+      <Helmet><title>Switch Workspace | DevInspectAI</title></Helmet>
       <div className="w-full min-h-screen py-12 px-4">
         <div className="container mx-auto max-w-5xl">
           <div className="text-center mb-12">
