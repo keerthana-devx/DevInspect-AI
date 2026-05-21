@@ -20,6 +20,7 @@ import SwitchModePage from '@/pages/SwitchModePage.jsx';
 import SettingsPage from '@/pages/SettingsPage.jsx';
 import ProfilePage from '@/pages/ProfilePage.jsx';
 import AdminPage from '@/pages/AdminPage.jsx';
+import OAuthCallbackPage from '@/pages/OAuthCallbackPage.jsx';
 
 // ScrollToTop Component
 const ScrollToTop = () => {
@@ -69,6 +70,7 @@ const AnimatedRoutes = () => {
       <Routes location={location} key={location.pathname}>
         <Route path="/login" element={<AnimatedRoute><LoginPage /></AnimatedRoute>} />
         <Route path="/signup" element={<AnimatedRoute><SignupPage /></AnimatedRoute>} />
+        <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
         
         {/* Protected Routes */}
         <Route path="/" element={<ProtectedRoute><AppLayout><AnimatedRoute><HomePage /></AnimatedRoute></AppLayout></ProtectedRoute>} />

@@ -108,6 +108,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem("devinspect-token");
     localStorage.removeItem("devinspect-user");
     localStorage.removeItem("devinspect-mode");
+    // Hard redirect — bypasses AnimatePresence blank-screen flash
+    window.location.replace("/login");
   };
 
   const deleteAccountOnBackend = async () => {

@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Sparkles, Mail, Lock, User, Eye, EyeOff, Github, Chrome } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
+import { AUTH_GITHUB_URL, AUTH_GOOGLE_URL } from '@/lib/apiConfig';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -363,11 +364,11 @@ const SignupPage = () => {
                   </div>
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-4">
-                  <Button variant="outline" className="h-12 border-border/50 hover:bg-muted/50 hover:border-border transition-all">
+                  <Button onClick={() => window.location.href = AUTH_GITHUB_URL} variant="outline" className="h-12 border-border/50 hover:bg-muted/50 hover:border-border transition-all">
                     <Github className="mr-2 h-5 w-5" />
                     GitHub
                   </Button>
-                  <Button variant="outline" className="h-12 border-border/50 hover:bg-muted/50 hover:border-border transition-all">
+                  <Button onClick={() => window.location.href = AUTH_GOOGLE_URL} variant="outline" className="h-12 border-border/50 hover:bg-muted/50 hover:border-border transition-all">
                     <Chrome className="mr-2 h-5 w-5" />
                     Google
                   </Button>

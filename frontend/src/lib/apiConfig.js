@@ -11,8 +11,10 @@ export const API_ORIGIN = trimSlash(
 );
 
 // Authentication Endpoints
-export const AUTH_LOGIN_URL = `${API_ORIGIN}/api/auth/login`;
+export const AUTH_LOGIN_URL    = `${API_ORIGIN}/api/auth/login`;
 export const AUTH_REGISTER_URL = `${API_ORIGIN}/api/auth/register`;
+export const AUTH_GOOGLE_URL   = `${API_ORIGIN}/api/auth/google`;
+export const AUTH_GITHUB_URL   = `${API_ORIGIN}/api/auth/github`;
 
 // User Endpoints
 export const USER_PROFILE_URL = `${API_ORIGIN}/api/user/profile`;

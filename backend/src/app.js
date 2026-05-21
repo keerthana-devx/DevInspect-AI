@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import passport from './config/passport.js';
 import authRoutes      from './routes/authRoutes.js';
 import analysisRoutes  from './routes/analysisRoutes.js';
 import userRoutes      from './routes/userRoutes.js';
@@ -25,6 +26,7 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '2mb' }));
+app.use(passport.initialize());
 
 /* ─── Public routes ──────────────────────────────── */
 app.use('/api/auth',     authRoutes);
