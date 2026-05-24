@@ -21,6 +21,8 @@ import {
   BarElement,
 } from "chart.js";
 import { getReviewsFromServer, normalizeMode, computeAiScore } from "@/lib/historyStorage";
+import StreakCard from "@/components/StreakCard";
+import GamificationPanel from "@/components/GamificationPanel";
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
@@ -238,6 +240,16 @@ const DashboardPage = () => {
                   </motion.div>
                 );
               })}
+            </div>
+
+            {/* Streak Card */}
+            <div className="mb-10">
+              <StreakCard />
+            </div>
+
+            {/* Gamification Panel */}
+            <div className="mb-10">
+              <GamificationPanel />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 mb-10">

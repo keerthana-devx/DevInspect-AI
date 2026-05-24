@@ -156,3 +156,96 @@
     letter-spacing: -0.02em;
   }
 }
+
+@layer components {
+  /* ── Glassmorphism card ─────────────────────────────────────────── */
+  .card-glass {
+    @apply bg-card/80 backdrop-blur-xl border border-border/40 rounded-3xl shadow-xl shadow-black/5;
+  }
+
+  .dark .card-glass {
+    @apply bg-card/60 border-border/30 shadow-black/20;
+  }
+
+  /* ── Gradient brand icon background ────────────────────────────── */
+  .gradient-brand {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%);
+  }
+
+  /* ── Gradient text ──────────────────────────────────────────────── */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%);
+  }
+
+  /* ── Primary button ─────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-2xl font-bold transition-all duration-200
+           bg-primary text-primary-foreground
+           hover:opacity-90 hover:shadow-lg hover:shadow-primary/30
+           active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+
+  /* ── Premium input ──────────────────────────────────────────────── */
+  .input-premium {
+    @apply bg-background/60 border border-border/50 rounded-2xl
+           focus:border-primary/60 focus:ring-2 focus:ring-primary/20
+           placeholder:text-muted-foreground/50
+           transition-all duration-200;
+  }
+
+  /* ── Glow effect ────────────────────────────────────────────────── */
+  .glow-effect {
+    @apply shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-shadow duration-300;
+  }
+
+  /* ── Animated background ────────────────────────────────────────── */
+  .bg-animated {
+    @apply bg-background relative;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, hsl(var(--primary) / 0.06) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, hsl(var(--secondary) / 0.06) 0%, transparent 60%);
+  }
+
+  /* ── Glass utility (dropdown menus) ────────────────────────────── */
+  .glass {
+    @apply bg-card/90 backdrop-blur-xl border border-border/30;
+  }
+
+  /* ── Shimmer skeleton ───────────────────────────────────────────── */
+  .skeleton {
+    @apply bg-muted/60 rounded-xl animate-pulse;
+  }
+
+  /* ── Interview micro-animations ────────────────────────────────── */
+  .anim-shake {
+    animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+  }
+
+  .anim-pop {
+    animation: pop 0.4s cubic-bezier(.36,.07,.19,.97) both;
+  }
+
+  .anim-fade-in {
+    animation: fadeIn 0.3s ease-out both;
+  }
+}
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(3px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+@keyframes pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

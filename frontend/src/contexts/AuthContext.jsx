@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react";
 import {
   AUTH_LOGIN_URL,
   AUTH_REGISTER_URL,
@@ -31,6 +31,18 @@ export const AuthProvider = ({ children }) => {
       if (storedUser && token) {
         setCurrentUser(storedUser);
         setCurrentMode(normalizeMode(storedUser.currentMode));
+        // Refresh profile from server to get latest avatar/streak
+        try {
+          const res = await fetch(USER_PROFILE_URL, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const merged = { ...storedUser, avatar: data.avatar, streak: data.streak, xp: data.xp, badges: data.badges, longestStreak: data.longestStreak };
+            setCurrentUser(merged);
+            localStorage.setItem("devinspect-user", JSON.stringify(merged));
+          }
+        } catch { /* silent */ }
       }
 
       setInitialLoading(false);
@@ -39,33 +51,45 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
-  const getAuthHeaders = () => {
+  const getAuthHeaders = useCallback(() => {
     const token = localStorage.getItem("devinspect-token");
-
     return {
       "Content-Type": "application/json",
       Authorization: token ? `Bearer ${token}` : "",
     };
-  };
+  }, []);
 
-  const login = async (email, password) => {
+  const persistUser = useCallback((user) => {
+    setCurrentUser(user);
+    localStorage.setItem("devinspect-user", JSON.stringify(user));
+  }, []);
+
+  const login = async (emailOrUser, passwordOrToken) => {
     setError("");
 
+    // OAuth path: login(userObject, token)
+    if (typeof emailOrUser === 'object' && emailOrUser !== null) {
+      const userData = emailOrUser;
+      const token = passwordOrToken;
+      localStorage.setItem("devinspect-token", token);
+      localStorage.setItem("devinspect-user", JSON.stringify(userData));
+      localStorage.setItem("devinspect-mode", userData.currentMode || 'developer');
+      setCurrentUser(userData);
+      setCurrentMode(normalizeMode(userData.currentMode));
+      return userData;
+    }
+
+    // Email/password path
+    const email = emailOrUser;
+    const password = passwordOrToken;
     const response = await fetch(AUTH_LOGIN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-
     const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || "Login failed");
-    }
-
-    if (!data.token) {
-      throw new Error("Token missing from backend response");
-    }
+    if (!response.ok) throw new Error(data.message || "Login failed");
+    if (!data.token) throw new Error("Token missing from backend response");
 
     const mappedUser = {
       id: data._id,
@@ -73,16 +97,18 @@ export const AuthProvider = ({ children }) => {
       name: data.name,
       role: data.role || 'user',
       currentMode: data.currentMode || 'developer',
+      avatar: data.avatar || '',
+      streak: data.streak || 0,
+      xp: data.xp || 0,
+      badges: data.badges || [],
+      longestStreak: data.longestStreak || 0,
     };
 
-    // SAVE TOKEN
     localStorage.setItem("devinspect-token", data.token);
     localStorage.setItem("devinspect-user", JSON.stringify(mappedUser));
     localStorage.setItem("devinspect-mode", mappedUser.currentMode);
-
     setCurrentUser(mappedUser);
     setCurrentMode(normalizeMode(mappedUser.currentMode));
-
     return mappedUser;
   };
 
@@ -92,14 +118,22 @@ export const AuthProvider = ({ children }) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, name }),
     });
-
     const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.message || "Signup failed");
-    }
-
+    if (!res.ok) throw new Error(data.message || "Signup failed");
     return login(email, password);
+  };
+
+  // Password reset — fire-and-forget to backend; always resolves to prevent email enumeration
+  const requestPasswordReset = async (email) => {
+    try {
+      await fetch(`${AUTH_LOGIN_URL.replace('/login', '/forgot-password')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+    } catch {
+      // Silently ignore — always show success to prevent email enumeration
+    }
   };
 
   const logout = () => {
@@ -108,7 +142,6 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem("devinspect-token");
     localStorage.removeItem("devinspect-user");
     localStorage.removeItem("devinspect-mode");
-    // Hard redirect — bypasses AnimatePresence blank-screen flash
     window.location.replace("/login");
   };
 
@@ -116,10 +149,7 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem("devinspect-token");
     const response = await fetch(`${USER_PROFILE_URL}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: token ? `Bearer ${token}` : '',
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
     });
     if (!response.ok) {
       const data = await response.json();
@@ -127,28 +157,71 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const switchMode = (mode) => {
+  const switchMode = useCallback((mode) => {
     const normalized = normalizeMode(mode);
     setCurrentMode(normalized);
     localStorage.setItem("devinspect-mode", normalized);
+  }, []);
+
+  const updateProfileOnBackend = async (payload) => {
+    const token = localStorage.getItem("devinspect-token");
+    const res = await fetch(USER_PROFILE_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Update failed');
+    const merged = { ...currentUser, ...data };
+    persistUser(merged);
+    return data;
   };
 
+  const updateUserPreferences = useCallback(async (prefs) => {
+    localStorage.setItem('devinspect-preferences', JSON.stringify(prefs));
+  }, []);
+
+  const updateAvatarInContext = useCallback((avatarUrl) => {
+    setCurrentUser(prev => {
+      if (!prev) return prev;
+      const merged = { ...prev, avatar: avatarUrl };
+      localStorage.setItem("devinspect-user", JSON.stringify(merged));
+      return merged;
+    });
+  }, []);
+
+  const updateStreakInContext = useCallback((streakData) => {
+    if (!streakData) return;
+    setCurrentUser(prev => {
+      if (!prev) return prev;
+      const merged = { ...prev, ...streakData };
+      localStorage.setItem("devinspect-user", JSON.stringify(merged));
+      return merged;
+    });
+  }, []);
+
+  const contextValue = useMemo(() => ({
+    currentUser,
+    currentMode,
+    isAuthenticated: !!currentUser,
+    initialLoading,
+    error,
+    login,
+    signup,
+    logout,
+    requestPasswordReset,
+    switchMode,
+    getAuthHeaders,
+    deleteAccountOnBackend,
+    updateProfileOnBackend,
+    updateUserPreferences,
+    updateAvatarInContext,
+    updateStreakInContext,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [currentUser, currentMode, initialLoading, error]);
+
   return (
-    <AuthContext.Provider
-      value={{
-        currentUser,
-        currentMode,
-        isAuthenticated: !!currentUser,
-        initialLoading,
-        error,
-        login,
-        signup,
-        logout,
-        switchMode,
-        getAuthHeaders,
-        deleteAccountOnBackend,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

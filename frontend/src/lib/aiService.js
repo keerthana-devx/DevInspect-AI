@@ -203,22 +203,14 @@ export const analyzeContent = async (code, mode) => {
 export const checkAiHealth = async () => {
   try {
     const res = await axios.get(
-      'https://openrouter.ai/api/v1/models',
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        },
-      }
+      `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/health`
     );
-
     return {
-      status: 'ok',
-      models: res.data?.data?.length || 0,
+      ready:  Boolean(res.data?.ready),
+      status: res.data?.status || 'ok',
+      providers: res.data?.providers || {},
     };
   } catch (err) {
-    return {
-      status: 'error',
-      message: err.message,
-    };
+    return { ready: false, status: 'error', providers: {} };
   }
 };

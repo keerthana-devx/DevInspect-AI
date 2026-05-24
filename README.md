@@ -218,4 +218,3 @@ DevInspectAI/
 
 ## 📄 License
 
-ISC

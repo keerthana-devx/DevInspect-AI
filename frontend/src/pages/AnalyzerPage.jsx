@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -30,6 +30,26 @@ import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
+import useConfetti from '../hooks/useConfetti';
+import TypingText from '../components/TypingText';
+import ShareButton from '../components/ShareButton';
+import ApplyFixModal from '../components/ApplyFixModal';
+import VoiceControls from '../components/VoiceControls';
+import WaitingGameModal from '../components/WaitingGameModal';
+import QuickActionsBar from '../components/QuickActionsBar';
+import AIAssistantPanel from '../components/AIAssistantPanel';
+import LoadingSkeleton from '../components/LoadingSkeleton';
+import CollabPanel from '../components/CollabPanel';
+
+// New enhanced components
+import SuccessCelebration from '../components/SuccessCelebration';
+import EnhancedCollabPanel from '../components/EnhancedCollabPanel';
+import { AIStreamingText, AIThinkingIndicator, StreamingLoadingSkeleton } from '../components/AIStreamingComponents';
+import EngagementSystem from '../components/EngagementSystem';
+import EnhancedQuickActions from '../components/EnhancedQuickActions';
+
+// Performance hooks
+import { useDebounce, useDebouncedCallback, useCancellableRequest, useOptimisticUpdates } from '../hooks/usePerformanceOptimization';
 
 import {
   saveReviewToServer,
@@ -39,6 +59,7 @@ import {
   normalizeMode
 } from '../lib/historyStorage';
 import { API_ORIGIN, createAuthOptions } from '../lib/apiConfig';
+import { useMascotContext } from '../contexts/MascotContext.jsx';
 
 import {
   Select,
@@ -49,7 +70,8 @@ import {
 } from '../components/ui/select';
 
 const AnalyzerPage = () => {
-  const { currentMode, currentUser, getAuthHeaders } = useAuth();
+  const { currentMode, currentUser, getAuthHeaders, updateStreakInContext } = useAuth();
+  const { mascot } = useMascotContext();
 
   // Multi-file state
   const [files, setFiles] = useState([]); // Array of { name: '', content: '' }
@@ -59,12 +81,117 @@ const AnalyzerPage = () => {
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState('auto'); // Default: Auto-Detect
   const [analysisMode, setAnalysisMode] = useState('developer');
+  const [explanationLevel, setExplanationLevel] = useState('medium');
   const [selectedWorkspace, setSelectedWorkspace] = useState('personal');
   const [workspaces, setWorkspaces] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [resultId, setResultId] = useState(null);
   const [history, setHistory] = useState([]);
-  const [viewTab, setViewTab] = useState('diff'); // 'diff' or 'explanation' or 'raw'
+  const [viewTab, setViewTab] = useState('diff');
+  const [typingActive, setTypingActive] = useState(false);
+  const [showFixModal, setShowFixModal] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [userStats, setUserStats] = useState(null);
+  const [aiThinkingStage, setAiThinkingStage] = useState('analyzing');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+
+  const [fileUploading, setFileUploading] = useState(false);
+
+  // Explanation difficulty feature
+  const [explainDifficulty, setExplainDifficulty] = useState(
+    () => localStorage.getItem('devinspect-explain-difficulty') || 'medium'
+  );
+  const [showDifficultyMenu, setShowDifficultyMenu] = useState(false);
+  const [regenLoading, setRegenLoading] = useState(false);
+  const [displayedExplanation, setDisplayedExplanation] = useState('');
+  const difficultyMenuRef = useRef(null);
+
+  const DIFFICULTY_CONFIG = {
+    easy:   { label: 'Easy',   emoji: '🟢', color: 'text-green-500',  bg: 'bg-green-500/10',  border: 'border-green-500/30'  },
+    medium: { label: 'Medium', emoji: '🟡', color: 'text-amber-500',  bg: 'bg-amber-500/10',  border: 'border-amber-500/30'  },
+    hard:   { label: 'Hard',   emoji: '🔴', color: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/30' },
+  };
+
+  const DIFFICULTY_PROMPTS = {
+    easy:   'Explain this code in very simple beginner-friendly language. Use easy real-life examples, explain every line, avoid jargon, and make it feel like teaching a student who is just starting to code.',
+    medium: 'Explain this code clearly with proper programming concepts and balanced technical depth. Cover the logic flow, key concepts, and mention relevant optimizations.',
+    hard:   'Explain this code like a senior software engineer reviewing production-level code. Include time complexity, space complexity, architecture reasoning, edge cases, best practices, and optimization suggestions using real-world engineering terminology.',
+  };
+
+  // Close difficulty menu on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (difficultyMenuRef.current && !difficultyMenuRef.current.contains(e.target)) {
+        setShowDifficultyMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Sync displayedExplanation when result changes
+  useEffect(() => {
+    if (result?.explanation) setDisplayedExplanation(result.explanation);
+  }, [result]);
+
+  const handleDifficultyChange = (level) => {
+    setExplainDifficulty(level);
+    localStorage.setItem('devinspect-explain-difficulty', level);
+    setShowDifficultyMenu(false);
+  };
+
+  const handleRegenerateExplanation = async () => {
+    if (!result?.input) return;
+    setRegenLoading(true);
+    setDisplayedExplanation('');
+    try {
+      const token = localStorage.getItem('devinspect-token');
+      const res = await fetch(`${API_ORIGIN}/api/analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          text: result.input,
+          mode: result.mode,
+          language: result.language,
+          explanationLevel: explainDifficulty,
+          context: DIFFICULTY_PROMPTS[explainDifficulty],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Regeneration failed');
+      const newExplanation = data.result?.explanation || '';
+      setDisplayedExplanation(newExplanation);
+      setResult(prev => ({ ...prev, explanation: newExplanation }));
+      toast.success(`Explanation regenerated at ${DIFFICULTY_CONFIG[explainDifficulty].label} level`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to regenerate explanation');
+      setDisplayedExplanation(result?.explanation || '');
+    } finally {
+      setRegenLoading(false);
+    }
+  };
+
+  const debouncedCode = useDebounce(code, 300);
+  const { makeRequest, cancelRequest } = useCancellableRequest();
+  const { data: optimisticResult, updateOptimistically } = useOptimisticUpdates(result);
+
+  // Enhanced confetti for high scores
+  useConfetti(result?.aiScore || 0, !!result);
+  
+  // Show celebration for excellent scores — only once per result
+  const celebrationFiredRef = useRef(false);
+  useEffect(() => {
+    if (result?.aiScore >= 90 && !celebrationFiredRef.current) {
+      celebrationFiredRef.current = true;
+      setShowCelebration(true);
+    }
+    if (!result) {
+      celebrationFiredRef.current = false;
+      setShowCelebration(false);
+    }
+  }, [result]);
   
   // Repo integration simulations
   const [showRepoModal, setShowRepoModal] = useState(false);
@@ -143,7 +270,7 @@ const AnalyzerPage = () => {
     }
   };
 
-  // Run AI Analysis
+  // Enhanced AI Analysis with streaming and performance optimization
   const handleRun = async () => {
     const finalCode = files.length > 0 
       ? files.map(f => `// File: ${f.name}\n${f.content}`).join('\n\n')
@@ -157,37 +284,60 @@ const AnalyzerPage = () => {
     setLoading(true);
     setResult(null);
     setChatMessages([]);
+    setIsStreaming(true);
+    setAiThinkingStage('analyzing');
+    mascot.analyzing();
 
     try {
       const mode = normalizeMode(analysisMode);
       const detectedLang = language === 'auto' ? detectLanguage(finalCode) : language;
 
-      // Make API call to backend /api/analysis
-      const token = localStorage.getItem('devinspect-token');
-      const response = await fetch(`${API_ORIGIN}/api/analysis`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          text: finalCode,
-          mode,
-          language: detectedLang,
-          workspaceId: selectedWorkspace !== 'personal' ? selectedWorkspace : undefined
-        })
+      // Simulate AI thinking stages
+      const stages = ['analyzing', 'processing', 'generating', 'finalizing'];
+      let stageIndex = 0;
+      const stageInterval = setInterval(() => {
+        if (stageIndex < stages.length - 1) {
+          stageIndex++;
+          setAiThinkingStage(stages[stageIndex]);
+        }
+      }, 1500);
+
+      const analysisResult = await makeRequest(async (signal) => {
+        const token = localStorage.getItem('devinspect-token');
+        
+        // Backend handles explanationLevel directly for student mode
+        const response = await fetch(`${API_ORIGIN}/api/analysis`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            text: finalCode,
+            mode,
+            language: detectedLang,
+            workspaceId: selectedWorkspace !== 'personal' ? selectedWorkspace : undefined,
+            explanationLevel: mode === 'student' ? explanationLevel : undefined
+          }),
+          signal
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.message || 'Analysis failed.');
+        }
+
+        return response.json();
       });
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.message || 'Analysis failed.');
-      }
+      clearInterval(stageInterval);
 
-      const srvData = await response.json();
-      
+      if (!analysisResult) return; // Request was cancelled
+
+      const srvData = analysisResult;
       const r = srvData.result || {};
 
-      // Build full result object matching all schema fields
+      // Build full result object
       const payload = {
         input:         finalCode,
         language:      detectedLang,
@@ -217,7 +367,53 @@ const AnalyzerPage = () => {
         workspaceId:   selectedWorkspace,
       };
 
+      // Use optimistic updates
+      updateOptimistically(payload, async () => {
+        setStreamingText(payload.explanation);
+        setIsStreaming(true);
+        
+        // Simulate streaming delay
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        return payload;
+      });
+
       setResult(payload);
+      setResultId(srvData._id || null);
+      setTypingActive(true);
+
+      // Show achievement notifications + mascot
+      if (srvData.engagement) {
+        setUserStats(prev => ({
+          ...prev,
+          ...srvData.engagement.engagement,
+          xpGained: srvData.engagement.xpGained
+        }));
+        if (srvData.engagement.newAchievements?.length > 0) {
+          srvData.engagement.newAchievements.forEach(achievement => {
+            toast.success(`🏆 Achievement Unlocked: ${achievement.name}!`);
+            setTimeout(() => mascot.badgeEarned(achievement.name, achievement.points), 800);
+          });
+        }
+        // Level up mascot
+        const newLevel = srvData.engagement.engagement?.level;
+        const xpGained = srvData.engagement.xpGained;
+        if (newLevel && xpGained) setTimeout(() => mascot.levelUp(newLevel, xpGained), 400);
+      }
+
+      // Mascot reaction based on result
+      const criticalCount = payload.errors.filter(e => String(e.severity||'').toLowerCase() === 'critical').length;
+      const highCount     = payload.errors.filter(e => String(e.severity||'').toLowerCase() === 'high').length;
+      const securityCount = payload.errors.filter(e => String(e.category||'').toLowerCase().includes('security')).length;
+      setTimeout(() => {
+        if (criticalCount > 0)       mascot.criticalBug(criticalCount);
+        else if (securityCount > 0)  mascot.securityAlert(securityCount);
+        else if (highCount > 0)      mascot.bugFound(highCount);
+        else if (payload.aiScore >= 90) mascot.cleanCode(payload.aiScore);
+      }, 600);
+
+      // Update streak in context
+      if (srvData.streak) updateStreakInContext(srvData.streak);
       
       // Update history list
       const freshHistory = await getReviewsFromServer();
@@ -240,26 +436,47 @@ const AnalyzerPage = () => {
       setResult(null);
     } finally {
       setLoading(false);
+      setIsStreaming(false);
     }
   };
 
-  // File upload handler
-  const handleFileUpload = (e) => {
+  // File upload handler — sends to backend for proper extraction (docx, pdf, text)
+  const handleFileUpload = async (e) => {
     const fileList = Array.from(e.target.files);
-    fileList.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const fileContent = event.target.result;
-        const newFile = { name: file.name, content: fileContent };
+    if (!fileList.length) return;
+    // Reset input so same file can be re-uploaded
+    e.target.value = '';
+
+    setFileUploading(true);
+    for (const file of fileList) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch(`${API_ORIGIN}/api/upload-file`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          toast.error(data.message || `Failed to read ${file.name}`);
+          continue;
+        }
+
+        const newFile = { name: file.name, content: data.text };
         setFiles(prev => {
           const updated = [...prev, newFile];
           setActiveFileIndex(updated.length - 1);
           return updated;
         });
         toast.success(`Uploaded ${file.name}`);
-      };
-      reader.readAsText(file);
-    });
+      } catch (err) {
+        toast.error(`Error reading ${file.name}: ${err.message}`);
+      }
+    }
+    setFileUploading(false);
   };
 
   // Pull from GitHub simulation
@@ -274,11 +491,21 @@ const AnalyzerPage = () => {
     toast.success(`Imported ${gitFile.name} from simulated Git repository`);
   };
 
-  // Apply One-Click Fix
+  // Apply fix — opens confirmation modal
   const handleApplyFix = () => {
     if (!result?.correctedCode) return;
+    setShowFixModal(true);
+  };
+
+  const handleConfirmApplyAll = () => {
     handleCodeChange(result.correctedCode);
-    toast.success('Suggested refactored code applied to editor!');
+    toast.success('AI fix applied to editor!');
+  };
+
+  const handleApplySelected = (selectedErrors) => {
+    // Acknowledge selected: show which fixes were noted, still apply full corrected code
+    handleCodeChange(result.correctedCode);
+    toast.success(`Applied fix — ${selectedErrors.length} issue(s) acknowledged.`);
   };
 
   // Real AI Chat - calls /api/chat/followup with analysis context
@@ -389,6 +616,20 @@ ${result.correctedCode}
                 </SelectContent>
               </Select>
 
+              {/* Explanation Level (only for student mode) */}
+              {analysisMode === 'student' && (
+                <Select value={explanationLevel} onValueChange={setExplanationLevel}>
+                  <SelectTrigger className="w-[120px] h-10 input-premium">
+                    <SelectValue placeholder="Level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="easy">Easy</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="hard">Hard</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+
               {/* Language select */}
               <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger className="w-[140px] h-10 input-premium">
@@ -441,9 +682,11 @@ ${result.correctedCode}
                   
                   {/* File Input and Git Actions */}
                   <div className="flex items-center gap-2">
-                    <label className="btn-secondary h-8 px-3 rounded-lg text-xs flex items-center gap-1.5 cursor-pointer font-bold border border-border/50 bg-background/50 hover:bg-muted/50">
-                      <Upload className="w-3.5 h-3.5" /> Upload File
-                      <input type="file" onChange={handleFileUpload} className="hidden" multiple />
+                    <label className={`btn-secondary h-8 px-3 rounded-lg text-xs flex items-center gap-1.5 font-bold border border-border/50 bg-background/50 hover:bg-muted/50 ${fileUploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                      {fileUploading
+                        ? <><motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full" /> Reading...</>
+                        : <><Upload className="w-3.5 h-3.5" /> Upload File</>}
+                      <input type="file" onChange={handleFileUpload} className="hidden" multiple disabled={fileUploading} />
                     </label>
                     <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs font-bold border-border/50" onClick={() => setShowRepoModal(true)}>
                       <GitBranch className="w-3.5 h-3.5 mr-1" /> Git Repo
@@ -514,6 +757,7 @@ ${result.correctedCode}
                         <Button variant="outline" size="icon" onClick={handleExportMarkdown} className="h-9 w-9 border-border/30 rounded-xl" title="Export Report">
                           <Download className="w-4 h-4" />
                         </Button>
+                        <ShareButton analysisId={resultId} />
                         {result.correctedCode && (
                           <Button onClick={handleApplyFix} className="btn-secondary h-9 rounded-xl font-bold text-xs">
                             Apply Fix
@@ -523,10 +767,58 @@ ${result.correctedCode}
                     </div>
 
                     {/* View Selection Tabs */}
-                    <div className="grid grid-cols-3 gap-2 mb-4 bg-muted/40 p-1 rounded-xl">
-                      <button onClick={() => setViewTab('diff')} className={`py-1.5 text-xs font-bold rounded-lg ${viewTab === 'diff' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>Diff Viewer</button>
-                      <button onClick={() => setViewTab('explanation')} className={`py-1.5 text-xs font-bold rounded-lg ${viewTab === 'explanation' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>Summary</button>
-                      <button onClick={() => setViewTab('raw')} className={`py-1.5 text-xs font-bold rounded-lg ${viewTab === 'raw' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>Prompt Output</button>
+                    <div className="flex items-center gap-1 mb-4 bg-muted/40 p-1 rounded-xl">
+                      <button onClick={() => setViewTab('diff')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${viewTab === 'diff' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>Diff Viewer</button>
+                      <button onClick={() => setViewTab('explanation')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${viewTab === 'explanation' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>Summary</button>
+                      <button onClick={() => setViewTab('raw')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${viewTab === 'raw' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}>Prompt Output</button>
+
+                      {/* Explanation Difficulty Icon — beside Prompt Output */}
+                      <div className="relative ml-1" ref={difficultyMenuRef}>
+                        <button
+                          onClick={() => setShowDifficultyMenu(v => !v)}
+                          title="Change Explanation Difficulty"
+                          className={`h-7 w-7 flex items-center justify-center rounded-lg border transition-all hover:bg-muted/60 ${
+                            showDifficultyMenu ? 'bg-primary/20 border-primary/40 text-primary' : 'border-border/40 text-muted-foreground'
+                          }`}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path fillRule="evenodd" d="M2 2.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5V3a.5.5 0 0 0-.5-.5zM3 3H2v1h1z"/>
+                            <path d="M5 3.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5M5.5 7a.5.5 0 0 0 0 1h9a.5.5 0 0 0 0-1zm0 4a.5.5 0 0 0 0 1h9a.5.5 0 0 0 0-1z"/>
+                            <path fillRule="evenodd" d="M1.5 7a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5zM2 7h1v1H2zm0 3.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5zm1 .5H2v1h1z"/>
+                          </svg>
+                        </button>
+
+                        <AnimatePresence>
+                          {showDifficultyMenu && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.92, y: -4 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.92, y: -4 }}
+                              transition={{ duration: 0.15 }}
+                              className="absolute right-0 top-9 z-50 w-44 card-glass rounded-xl border border-border/40 shadow-xl overflow-hidden"
+                            >
+                              <div className="px-3 py-2 border-b border-border/30">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Explanation Level</p>
+                              </div>
+                              {Object.entries(DIFFICULTY_CONFIG).map(([key, cfg]) => (
+                                <button
+                                  key={key}
+                                  onClick={() => handleDifficultyChange(key)}
+                                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold transition-all hover:bg-muted/50 ${
+                                    explainDifficulty === key ? `${cfg.bg} ${cfg.color}` : 'text-foreground/80'
+                                  }`}
+                                >
+                                  <span>{cfg.emoji}</span>
+                                  <span>{cfg.label}</span>
+                                  {explainDifficulty === key && (
+                                    <span className="ml-auto text-[10px] font-bold opacity-70">✓</span>
+                                  )}
+                                </button>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     </div>
 
                     {/* Active tab content */}
@@ -568,11 +860,56 @@ ${result.correctedCode}
 
                     {viewTab === 'explanation' && (
                       <div className="space-y-3">
-                        <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                          <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">
-                            {result.explanation || 'No explanation available.'}
-                          </p>
+                        {/* Difficulty badge + Regenerate button */}
+                        <div className="flex items-center justify-between">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                            DIFFICULTY_CONFIG[explainDifficulty].bg
+                          } ${
+                            DIFFICULTY_CONFIG[explainDifficulty].color
+                          } ${
+                            DIFFICULTY_CONFIG[explainDifficulty].border
+                          }`}>
+                            {DIFFICULTY_CONFIG[explainDifficulty].emoji} {DIFFICULTY_CONFIG[explainDifficulty].label} Level
+                          </span>
+                          <button
+                            onClick={handleRegenerateExplanation}
+                            disabled={regenLoading}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {regenLoading
+                              ? <><motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8 }} className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full" /> Generating...</>
+                              : <>↺ Regenerate</>}
+                          </button>
                         </div>
+
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={explainDifficulty + (regenLoading ? '-loading' : '-done')}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.2 }}
+                            className="p-4 bg-primary/5 rounded-2xl border border-primary/10"
+                          >
+                            {regenLoading ? (
+                              <div className="space-y-2">
+                                {[100, 85, 92, 70].map((w, i) => (
+                                  <div key={i} className={`h-3 bg-muted/60 rounded animate-pulse`} style={{ width: `${w}%` }} />
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">
+                                <AIStreamingText
+                                  text={displayedExplanation || result.explanation || 'No explanation available.'}
+                                  isStreaming={isStreaming}
+                                  onComplete={() => setIsStreaming(false)}
+                                  speed={25}
+                                />
+                              </div>
+                            )}
+                            {!regenLoading && <VoiceControls text={displayedExplanation || result.explanation} />}
+                          </motion.div>
+                        </AnimatePresence>
 
                         {/* Student mode extras */}
                         {result.steps?.length > 0 && (
@@ -693,6 +1030,15 @@ ${result.correctedCode}
         </div>
       </div>
 
+      {/* Apply Fix Confirmation Modal */}
+      <ApplyFixModal
+        isOpen={showFixModal}
+        onClose={() => setShowFixModal(false)}
+        onApplyAll={handleConfirmApplyAll}
+        onApplySelected={handleApplySelected}
+        result={result}
+      />
+
       {/* GitHub Repository Modal Simulation */}
       {showRepoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -727,6 +1073,13 @@ ${result.correctedCode}
           </div>
         </div>
       )}
+      {/* Success Celebration */}
+      <SuccessCelebration 
+        score={result?.aiScore || 0}
+        errors={result?.errors || []}
+        visible={showCelebration}
+        onComplete={() => setShowCelebration(false)}
+      />
     </>
   );
 };

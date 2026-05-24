@@ -18,7 +18,7 @@ export const updateUserProfile = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const allowed = ['name', 'currentMode', 'customRules', 'githubUser', 'githubToken'];
+    const allowed = ['name', 'currentMode', 'customRules', 'githubUser', 'githubToken', 'avatar'];
     for (const field of allowed) {
       if (req.body[field] !== undefined) user[field] = req.body[field];
     }
@@ -33,15 +33,20 @@ export const updateUserProfile = async (req, res) => {
     const updated = await user.save();
 
     res.json({
-      _id:         updated._id,
-      name:        updated.name,
-      email:       updated.email,
-      role:        updated.role,
-      currentMode: updated.currentMode,
-      customRules: updated.customRules,
-      apiKey:      updated.apiKey,
-      githubUser:  updated.githubUser,
-      createdAt:   updated.createdAt,
+      _id:          updated._id,
+      name:         updated.name,
+      email:        updated.email,
+      role:         updated.role,
+      currentMode:  updated.currentMode,
+      customRules:  updated.customRules,
+      apiKey:       updated.apiKey,
+      githubUser:   updated.githubUser,
+      avatar:       updated.avatar,
+      streak:       updated.streak,
+      longestStreak: updated.longestStreak,
+      xp:           updated.xp,
+      badges:       updated.badges,
+      createdAt:    updated.createdAt,
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });

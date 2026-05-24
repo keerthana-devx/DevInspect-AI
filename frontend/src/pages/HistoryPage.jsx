@@ -86,13 +86,12 @@ const HistoryPage = () => {
 
   // Filter reviews
   const filteredReviews = reviews.filter(r => {
-    const matchesSearch = 
-      r.input.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      r.explanation.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesLang = selectedLanguage === 'all' || r.language.toLowerCase() === selectedLanguage.toLowerCase();
+    const input = (r.input || '').toLowerCase();
+    const explanation = (r.explanation || '').toLowerCase();
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = input.includes(search) || explanation.includes(search);
+    const matchesLang = selectedLanguage === 'all' || (r.language || '').toLowerCase() === selectedLanguage.toLowerCase();
     const matchesBookmark = !showBookmarkedOnly || r.isBookmarked;
-
     return matchesSearch && matchesLang && matchesBookmark;
   });
 

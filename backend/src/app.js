@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import session from 'express-session';
+import rateLimit from 'express-rate-limit';
 import passport from './config/passport.js';
 import authRoutes      from './routes/authRoutes.js';
 import analysisRoutes  from './routes/analysisRoutes.js';
@@ -10,6 +12,14 @@ import chatRoutes      from './routes/chatRoutes.js';
 import reviewRoutes    from './routes/reviewRoutes.js';
 import aiRoutes        from './routes/aiRoutes.js';
 import testRoutes      from './routes/testRoutes.js';
+import avatarRoutes    from './routes/avatarRoutes.js';
+import shareRoutes     from './routes/shareRoutes.js';
+import rulesRoutes     from './routes/rulesRoutes.js';
+import extensionRoutes from './routes/extensionRoutes.js';
+import ciRoutes        from './routes/ciRoutes.js';
+import engagementRoutes from './routes/engagementRoutes.js';
+import uploadRoutes     from './routes/uploadRoutes.js';
+import mascotRoutes     from './routes/mascotRoutes.js';
 import { protect }     from './middleware/authMiddleware.js';
 import { isAdmin }     from './middleware/roleMiddleware.js';
 
@@ -26,19 +36,40 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '2mb' }));
+
+// Session required for Passport OAuth state verification (CSRF protection)
+app.use(session({
+  secret: process.env.JWT_SECRET || 'devinspect-session-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false, httpOnly: true, maxAge: 10 * 60 * 1000 }, // 10 min — only needed during OAuth handshake
+}));
 app.use(passport.initialize());
+app.use(passport.session());
+
+/* ─── Rate limiting ──────────────────────────────── */
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { message: 'Too many requests, please try again later.' } });
+const analysisLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: { message: 'Analysis rate limit exceeded. Please wait.' } });
 
 /* ─── Public routes ──────────────────────────────── */
-app.use('/api/auth',     authRoutes);
+app.use('/api/auth',     authLimiter, authRoutes);
 app.use('/api/review',   reviewRoutes);
 app.use('/api/ai',       aiRoutes);
 app.use('/api/test',     testRoutes);
+app.use('/api/ci',          ciRoutes);
+app.use('/api/upload-file', uploadRoutes);
+app.use('/api/mascot',      mascotRoutes);
 
 /* ─── Protected routes ───────────────────────────── */
-app.use('/api/analysis',  analysisRoutes);
-app.use('/api/user',      userRoutes);
-app.use('/api/workspace', workspaceRoutes);
-app.use('/api/chat',      chatRoutes);
+app.use('/api/analysis',   analysisLimiter, analysisRoutes);
+app.use('/api/user',       userRoutes);
+app.use('/api/workspace',  workspaceRoutes);
+app.use('/api/chat',       chatRoutes);
+app.use('/api/avatar',     avatarRoutes);
+app.use('/api/share',      shareRoutes);
+app.use('/api/rules',      rulesRoutes);
+app.use('/api/extension',  extensionRoutes);
+app.use('/api/engagement', engagementRoutes);
 
 /* ─── Admin routes (protect + isAdmin) ───────────── */
 app.use('/api/admin', protect, isAdmin, adminRoutes);

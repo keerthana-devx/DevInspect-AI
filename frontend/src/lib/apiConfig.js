@@ -18,6 +18,8 @@ export const AUTH_GITHUB_URL   = `${API_ORIGIN}/api/auth/github`;
 
 // User Endpoints
 export const USER_PROFILE_URL = `${API_ORIGIN}/api/user/profile`;
+export const AVATAR_URL       = `${API_ORIGIN}/api/avatar`;
+export const RULES_URL        = `${API_ORIGIN}/api/rules`;
 
 // Analysis Endpoints
 export const ANALYZE_CODE_URL = `${API_ORIGIN}/api/analyze-code`;
@@ -31,6 +33,15 @@ export const WORKSPACE_URL = `${API_ORIGIN}/api/workspace`;
 
 // Analysis History Endpoints
 export const ANALYSIS_URL = `${API_ORIGIN}/api/analysis`;
+
+// Extension Endpoints
+export const EXTENSION_URL = `${API_ORIGIN}/api/extension`;
+
+// Share Endpoints
+export const SHARE_URL = `${API_ORIGIN}/api/share`;
+
+// Mascot Endpoints (Amazon Bedrock / Titan Image Generator)
+export const MASCOT_URL = `${API_ORIGIN}/api/mascot`;
 
 /**
  * Create fetch options with auth headers

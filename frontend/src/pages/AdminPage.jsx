@@ -13,12 +13,6 @@ import { Navigate } from 'react-router-dom';
 
 const AdminPage = () => {
   const { currentUser } = useAuth();
-
-  // Redirect non-admins immediately
-  if (currentUser && currentUser.role !== 'admin') {
-    return <Navigate to="/" replace />;
-  }
-
   const [activeTab, setActiveTab]   = useState('stats');
   const [stats, setStats]           = useState(null);
   const [users, setUsers]           = useState([]);
@@ -26,7 +20,13 @@ const AdminPage = () => {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading]       = useState(false);
 
+  // Redirect non-admins — done via state check AFTER hooks
+  const isAdmin = currentUser?.role === 'admin';
+
   const token = localStorage.getItem('devinspect-token');
+
+  // Non-admin redirect after all hooks
+  if (currentUser && !isAdmin) return <Navigate to="/" replace />;
 
   const apiFetch = async (path) => {
     const res = await fetch(`${API_ORIGIN}${path}`, {

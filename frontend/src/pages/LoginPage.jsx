@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Sparkles, Mail, Lock, Eye, EyeOff, Github, Chrome } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
-import { AUTH_GITHUB_URL, AUTH_GOOGLE_URL } from '@/lib/apiConfig';
+import { API_ORIGIN } from '@/lib/apiConfig';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { toast } from 'sonner';
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   
   const [email, setEmail] = useState('');
@@ -19,6 +21,49 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState({ google: false, github: false });
+
+  // Handle OAuth errors from URL params or location state
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const urlError = urlParams.get('error');
+    const stateError = location.state?.error;
+    
+    if (urlError || stateError) {
+      const errorMessage = stateError || {
+        'google_failed':           'Google authentication failed. Please try again.',
+        'google_not_configured':   'Google OAuth is not configured on this server.',
+        'github_failed':           'GitHub authentication failed. Please try again.',
+        'github_not_configured':   'GitHub OAuth is not configured. Please add GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET to the backend .env file.',
+        'oauth_failed':            'OAuth authentication failed. Please try again.',
+      }[urlError] || 'Authentication failed. Please try again.';
+      
+      setError(errorMessage);
+      toast.error(errorMessage);
+      
+      // Clean up URL
+      if (urlError) {
+        navigate('/login', { replace: true });
+      }
+    }
+  }, [location, navigate]);
+
+  const handleOAuthLogin = (provider) => {
+    setOauthLoading(prev => ({ ...prev, [provider]: true }));
+    setError('');
+    
+    try {
+      const authUrl = `${API_ORIGIN}/api/auth/${provider}`;
+      
+      // For better mobile compatibility and popup blocking prevention
+      // Open OAuth in same window
+      window.location.href = authUrl;
+    } catch (err) {
+      console.error(`${provider} OAuth error:`, err);
+      setError(`Failed to initiate ${provider} authentication`);
+      setOauthLoading(prev => ({ ...prev, [provider]: false }));
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,7 +77,7 @@ const LoginPage = () => {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/dashboard');
+      navigate('/welcome');
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -281,12 +326,30 @@ const LoginPage = () => {
                   </div>
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-4">
-                  <Button onClick={() => window.location.href = AUTH_GITHUB_URL} variant="outline" className="h-12 border-border/50 hover:bg-muted/50 hover:border-border transition-all">
-                    <Github className="mr-2 h-5 w-5" />
+                  <Button 
+                    onClick={() => handleOAuthLogin('github')} 
+                    variant="outline" 
+                    className="h-12 border-border/50 hover:bg-muted/50 hover:border-border transition-all"
+                    disabled={oauthLoading.github || oauthLoading.google}
+                  >
+                    {oauthLoading.github ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Github className="mr-2 h-5 w-5" />
+                    )}
                     GitHub
                   </Button>
-                  <Button onClick={() => window.location.href = AUTH_GOOGLE_URL} variant="outline" className="h-12 border-border/50 hover:bg-muted/50 hover:border-border transition-all">
-                    <Chrome className="mr-2 h-5 w-5" />
+                  <Button 
+                    onClick={() => handleOAuthLogin('google')} 
+                    variant="outline" 
+                    className="h-12 border-border/50 hover:bg-muted/50 hover:border-border transition-all"
+                    disabled={oauthLoading.google || oauthLoading.github}
+                  >
+                    {oauthLoading.google ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Chrome className="mr-2 h-5 w-5" />
+                    )}
                     Google
                   </Button>
                 </div>
