@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
 import { motion, AnimatePresence } from "framer-motion";
-import { Save, User, Sliders, Bell, Key, Shield, Users, Plus, Trash2, Edit2, Check, X, Settings, Code, GitBranch, ToggleLeft, ToggleRight, Globe, Terminal, Copy } from "lucide-react";
+import { Save, User, Sliders, Bell, Key, Shield, Users, Plus, Trash2, Edit2, Check, X, Settings, Code, GitBranch, ToggleLeft, ToggleRight, Globe, Terminal, Copy, RefreshCw, CheckCircle2, XCircle, AlertCircle, ExternalLink, Download, Zap, Clock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext.jsx";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -55,17 +55,25 @@ const SettingsPage = () => {
 
   useEffect(() => { fetchRules(); }, []);
 
-  const [extensionToken, setExtensionToken] = useState('');
-  const [extensionLoading, setExtensionLoading] = useState(false);
+  const [extensionToken, setExtensionToken]         = useState('');
+  const [extensionLoading, setExtensionLoading]     = useState(false);
+  const [tokenMeta, setTokenMeta]                   = useState(null);   // { expiresAt, createdAt, expired }
+  const [tokenVisible, setTokenVisible]             = useState(false);
+  const [verifyStatus, setVerifyStatus]             = useState(null);   // null | 'checking' | 'ok' | 'fail'
+  const [verifyMsg, setVerifyMsg]                   = useState('');
 
-  // Load extension token
+  // Load extension token + metadata
   useEffect(() => {
     const fetchExtToken = async () => {
       try {
         const res = await fetch(`${API_ORIGIN}/api/extension/token`, {
           headers: { Authorization: `Bearer ${getToken()}` },
         });
-        if (res.ok) { const d = await res.json(); setExtensionToken(d.token || ''); }
+        if (res.ok) {
+          const d = await res.json();
+          setExtensionToken(d.token || '');
+          if (d.token) setTokenMeta({ expiresAt: d.expiresAt, createdAt: d.createdAt, expired: d.expired });
+        }
       } catch { /* silent */ }
     };
     fetchExtToken();
@@ -73,6 +81,7 @@ const SettingsPage = () => {
 
   const handleGenerateExtToken = async () => {
     setExtensionLoading(true);
+    setVerifyStatus(null);
     try {
       const res = await fetch(`${API_ORIGIN}/api/extension/token`, {
         method: 'POST',
@@ -81,8 +90,10 @@ const SettingsPage = () => {
       const d = await res.json();
       if (!res.ok) throw new Error(d.message);
       setExtensionToken(d.token);
-      toast.success('Extension token generated!');
-    } catch (e) { toast.error(e.message || 'Failed'); }
+      setTokenMeta({ expiresAt: d.expiresAt, createdAt: new Date().toISOString(), expired: false });
+      setTokenVisible(true);
+      toast.success('Extension token generated! Copy it now.');
+    } catch (e) { toast.error(e.message || 'Failed to generate token'); }
     finally { setExtensionLoading(false); }
   };
 
@@ -90,6 +101,27 @@ const SettingsPage = () => {
     if (!extensionToken) return;
     navigator.clipboard.writeText(extensionToken);
     toast.success('Token copied to clipboard!');
+  };
+
+  const handleVerifyToken = async () => {
+    if (!extensionToken) { toast.error('Generate a token first'); return; }
+    setVerifyStatus('checking');
+    setVerifyMsg('');
+    try {
+      const res = await fetch(`${API_ORIGIN}/api/extension/verify-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Extension-Token': extensionToken },
+        body: JSON.stringify({ token: extensionToken }),
+      });
+      const d = await res.json();
+      if (res.ok && d.success) {
+        setVerifyStatus('ok');
+        setVerifyMsg(d.message || 'Token is valid');
+      } else {
+        setVerifyStatus('fail');
+        setVerifyMsg(d.message || 'Token invalid');
+      }
+    } catch { setVerifyStatus('fail'); setVerifyMsg('Connection failed'); }
   };
 
   // Tab: Workspaces & Teams
@@ -695,42 +727,214 @@ const SettingsPage = () => {
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className="space-y-6"
+                    className="space-y-5 pb-4"
                   >
-                    <div>
-                      <h2 className="text-2xl font-bold mb-1">VS Code Extension</h2>
-                      <p className="text-xs text-muted-foreground">Connect your VS Code editor to DevInspectAI for inline code reviews.</p>
+                    {/* Header + connection badge */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h2 className="text-2xl font-bold mb-1 flex items-center gap-2">
+                          <Terminal className="w-6 h-6 text-primary" /> VS Code Extension
+                        </h2>
+                        <p className="text-xs text-muted-foreground">Connect VS Code to DevInspectAI for instant AI code reviews.</p>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border shrink-0 ${
+                        verifyStatus === 'ok'       ? 'bg-green-500/10 text-green-500 border-green-500/30'
+                        : verifyStatus === 'fail'   ? 'bg-destructive/10 text-destructive border-destructive/30'
+                        : verifyStatus === 'checking' ? 'bg-primary/10 text-primary border-primary/30'
+                        : 'bg-muted/50 text-muted-foreground border-border/30'
+                      }`}>
+                        {verifyStatus === 'ok'       ? <><CheckCircle2 className="w-3.5 h-3.5" /> Connected</>
+                        : verifyStatus === 'fail'    ? <><XCircle className="w-3.5 h-3.5" /> Disconnected</>
+                        : verifyStatus === 'checking'? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Checking...</>
+                        : <><AlertCircle className="w-3.5 h-3.5" /> Not verified</>}
+                      </div>
                     </div>
 
-                    <div className="p-4 rounded-xl border border-border/30 bg-muted/30 max-w-xl space-y-4">
-                      <Label className="font-bold">Extension Token</Label>
+                    {/* Step 1 — Token */}
+                    <div className="p-5 rounded-2xl border border-border/30 bg-muted/20 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-black flex items-center justify-center shrink-0">1</span>
+                        <h3 className="font-bold text-sm">Generate Your Extension Token</h3>
+                        {tokenMeta?.expired && (
+                          <span className="ml-auto text-[10px] font-bold text-destructive bg-destructive/10 border border-destructive/20 px-2 py-0.5 rounded-full">EXPIRED</span>
+                        )}
+                      </div>
                       <div className="flex gap-2">
-                        <Input
-                          readOnly
-                          value={extensionToken || '••••••••••••••••••••••••••••••••'}
-                          className="input-premium font-mono text-xs h-11 bg-background flex-1"
-                        />
-                        <Button onClick={copyToken} variant="outline" className="h-11 px-3 border-border/30" title="Copy token">
+                        <div className="relative flex-1">
+                          <Input
+                            readOnly
+                            type={tokenVisible ? 'text' : 'password'}
+                            value={extensionToken || ''}
+                            placeholder="Click Generate to create your token"
+                            className="input-premium font-mono text-xs h-11 bg-background pr-10"
+                          />
+                          {extensionToken && (
+                            <button
+                              onClick={() => setTokenVisible(v => !v)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            >
+                              {tokenVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          )}
+                        </div>
+                        <Button onClick={copyToken} disabled={!extensionToken} variant="outline" className="h-11 px-3 border-border/30" title="Copy">
                           <Copy className="w-4 h-4" />
                         </Button>
                         <Button onClick={handleGenerateExtToken} disabled={extensionLoading} className="btn-secondary h-11 text-xs font-bold min-w-[120px]">
-                          {extensionToken ? 'Regenerate' : 'Generate'}
+                          {extensionLoading
+                            ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />Generating...</>
+                            : extensionToken
+                              ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5" />Regenerate</>
+                              : <><Zap className="w-3.5 h-3.5 mr-1.5" />Generate</>}
                         </Button>
                       </div>
-                      <div className="text-xs text-muted-foreground space-y-2 bg-background/50 p-3 rounded-lg border border-border/20">
-                        <p className="font-bold text-foreground">Setup Instructions:</p>
-                        <ol className="space-y-1 list-decimal list-inside">
-                          <li>Install the DevInspectAI extension from VS Code Marketplace</li>
-                          <li>Open VS Code Settings → search "DevInspectAI"</li>
-                          <li>Paste your token in the <code className="bg-muted px-1 rounded">DEVINSPECT_TOKEN</code> field</li>
-                          <li>Right-click any file → "DevInspectAI: Review Code"</li>
-                        </ol>
+                      {tokenMeta && extensionToken && (
+                        <div className="flex flex-wrap gap-4 text-[11px] text-muted-foreground">
+                          {tokenMeta.createdAt && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> Created: {new Date(tokenMeta.createdAt).toLocaleDateString()}
+                            </span>
+                          )}
+                          {tokenMeta.expiresAt && (
+                            <span className={`flex items-center gap-1 ${tokenMeta.expired ? 'text-destructive' : 'text-green-500'}`}>
+                              <Clock className="w-3 h-3" /> Expires: {new Date(tokenMeta.expiresAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {extensionToken && (
+                        <div className="flex items-center gap-3">
+                          <Button
+                            onClick={handleVerifyToken}
+                            disabled={verifyStatus === 'checking'}
+                            variant="outline"
+                            className="h-9 text-xs font-bold border-primary/30 text-primary hover:bg-primary/5"
+                          >
+                            {verifyStatus === 'checking'
+                              ? <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />Verifying...</>
+                              : <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Verify Connection</>}
+                          </Button>
+                          {verifyMsg && (
+                            <span className={`text-xs font-semibold ${verifyStatus === 'ok' ? 'text-green-500' : 'text-destructive'}`}>
+                              {verifyStatus === 'ok' ? '✅' : '❌'} {verifyMsg}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Step 2 — Install */}
+                    <div className="p-5 rounded-2xl border border-border/30 bg-muted/20 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-black flex items-center justify-center shrink-0">2</span>
+                        <h3 className="font-bold text-sm">Install the VS Code Extension</h3>
                       </div>
-                      <div className="text-xs text-muted-foreground bg-background/50 p-3 rounded-lg border border-border/20">
-                        <p className="font-bold text-foreground mb-1">Webhook Endpoint:</p>
-                        <pre className="font-mono text-[10px] overflow-x-auto">{`POST ${API_ORIGIN}/api/extension/analyze
-Headers: X-Extension-Token: <your-token>
-Body: { "code": "...", "mode": "developer" }`}</pre>
+                      <p className="text-xs text-muted-foreground pl-8">
+                        Search <code className="bg-muted px-1.5 py-0.5 rounded font-mono">DevInspectAI</code> in the VS Code Extensions Marketplace, or install the <code className="bg-muted px-1.5 py-0.5 rounded font-mono">.vsix</code> file manually.
+                      </p>
+                      <div className="pl-8 flex flex-wrap items-center gap-3">
+                        <a
+                          href="https://marketplace.visualstudio.com/items?itemName=DevInspectAI.devinspectai"
+                          target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> Open Marketplace
+                        </a>
+                        <span className="text-muted-foreground text-xs">·</span>
+                        <span className="text-xs text-muted-foreground">or press <kbd className="bg-muted border border-border/40 px-1.5 py-0.5 rounded text-[10px] font-mono">Ctrl+Shift+X</kbd> in VS Code</span>
+                      </div>
+                    </div>
+
+                    {/* Step 3 — settings.json */}
+                    <div className="p-5 rounded-2xl border border-border/30 bg-muted/20 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-black flex items-center justify-center shrink-0">3</span>
+                        <h3 className="font-bold text-sm">Configure settings.json</h3>
+                      </div>
+                      <p className="text-xs text-muted-foreground pl-8">
+                        Open VS Code → <kbd className="bg-muted border border-border/40 px-1 py-0.5 rounded text-[10px] font-mono">Ctrl+Shift+P</kbd> → <em>Open User Settings (JSON)</em> and add:
+                      </p>
+                      <div className="pl-8 relative">
+                        <pre className="p-4 bg-background/80 border border-border/30 rounded-xl text-[11px] font-mono overflow-x-auto leading-relaxed text-foreground/90">{`{
+  "devinspectai.apiToken": "${extensionToken || 'YOUR_TOKEN_HERE'}",
+  "devinspectai.apiUrl":   "${API_ORIGIN}",
+  "devinspectai.mode":     "developer",
+  "devinspectai.autoAnalyze": false
+}`}</pre>
+                        <button
+                          onClick={() => {
+                            const cfg = `{\n  "devinspectai.apiToken": "${extensionToken || 'YOUR_TOKEN_HERE'}",\n  "devinspectai.apiUrl":   "${API_ORIGIN}",\n  "devinspectai.mode":     "developer",\n  "devinspectai.autoAnalyze": false\n}`;
+                            navigator.clipboard.writeText(cfg);
+                            toast.success('Config copied!');
+                          }}
+                          className="absolute top-2 right-2 p-1.5 rounded-lg bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground"
+                          title="Copy config"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Step 4 — Use */}
+                    <div className="p-5 rounded-2xl border border-border/30 bg-muted/20 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-black flex items-center justify-center shrink-0">4</span>
+                        <h3 className="font-bold text-sm">Analyze Code from VS Code</h3>
+                      </div>
+                      <ul className="pl-8 space-y-2 text-xs text-muted-foreground">
+                        <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" /> Open any code file in VS Code</li>
+                        <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" /> Right-click → <strong className="text-foreground">Analyze with DevInspectAI</strong></li>
+                        <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" /> Or press <kbd className="bg-muted border border-border/40 px-1 py-0.5 rounded text-[10px] font-mono">Ctrl+Shift+P</kbd> → <em>DevInspectAI: Analyze File</em></li>
+                        <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" /> Results appear in a side panel with score, bugs, and suggestions</li>
+                      </ul>
+                    </div>
+
+                    {/* API Reference */}
+                    <div className="p-5 rounded-2xl border border-border/30 bg-muted/20 space-y-3">
+                      <h3 className="font-bold text-sm flex items-center gap-2"><Key className="w-4 h-4 text-primary" /> API Endpoints Reference</h3>
+                      <div className="space-y-2">
+                        {[
+                          { method: 'POST', path: '/api/extension/analyze',      desc: 'Analyze code' },
+                          { method: 'POST', path: '/api/extension/verify-token', desc: 'Validate token' },
+                          { method: 'POST', path: '/api/extension/webhook',      desc: 'CI/CD webhook' },
+                          { method: 'GET',  path: '/api/extension/status',       desc: 'Health check' },
+                        ].map(ep => (
+                          <div key={ep.path} className="flex items-center gap-3 p-2 bg-background/60 rounded-lg border border-border/20 text-[11px] font-mono">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
+                              ep.method === 'POST' ? 'bg-blue-500/15 text-blue-400' : 'bg-green-500/15 text-green-400'
+                            }`}>{ep.method}</span>
+                            <span className="text-foreground/80 flex-1 truncate">{API_ORIGIN}{ep.path}</span>
+                            <span className="text-muted-foreground text-[10px] shrink-0">{ep.desc}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="p-3 bg-background/60 rounded-lg border border-border/20">
+                        <p className="text-[10px] font-bold text-muted-foreground mb-1">Required Header:</p>
+                        <pre className="text-[10px] font-mono text-foreground/80 overflow-x-auto">{`X-Extension-Token: ${extensionToken || '<your-token>'}`}</pre>
+                      </div>
+                    </div>
+
+                    {/* CI/CD Webhook */}
+                    <div className="p-5 rounded-2xl border border-border/30 bg-muted/20 space-y-3">
+                      <h3 className="font-bold text-sm flex items-center gap-2"><Zap className="w-4 h-4 text-amber-500" /> CI/CD Webhook (GitHub Actions)</h3>
+                      <div className="relative">
+                        <pre className="p-4 bg-background/80 border border-border/30 rounded-xl text-[10px] font-mono overflow-x-auto text-foreground/80 leading-relaxed">{`- name: DevInspectAI Code Review
+  run: |
+    curl -s -X POST ${API_ORIGIN}/api/extension/webhook \\
+      -H "X-Extension-Token: \${{ secrets.DEVINSPECT_TOKEN }}" \\
+      -H "Content-Type: application/json" \\
+      -d '{"code": "'$(cat src/index.js)'", "mode": "developer"}'`}</pre>
+                        <button
+                          onClick={() => {
+                            const txt = `- name: DevInspectAI Code Review\n  run: |\n    curl -s -X POST ${API_ORIGIN}/api/extension/webhook \\\n      -H "X-Extension-Token: \${{ secrets.DEVINSPECT_TOKEN }}" \\\n      -H "Content-Type: application/json" \\\n      -d '{"code": "'$(cat src/index.js)'", "mode": "developer"}'`;
+                            navigator.clipboard.writeText(txt);
+                            toast.success('Webhook snippet copied!');
+                          }}
+                          className="absolute top-2 right-2 p-1.5 rounded-lg bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground"
+                          title="Copy snippet"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   </motion.div>

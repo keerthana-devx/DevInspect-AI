@@ -1,83 +1,113 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { Sparkles, ArrowRight, Code2, BrainCircuit, Trophy } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Sparkles, Code2, TrendingUp, Zap, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
+import { Button } from '@/components/ui/button';
 
 const WelcomePage = () => {
-  const navigate = useNavigate();
+  const navigate    = useNavigate();
   const { currentUser } = useAuth();
-  const firstName = currentUser?.name?.split(' ')[0] || 'there';
+  const timerRef    = useRef(null);
+
+  // Auto-redirect to dashboard after 4 seconds
+  useEffect(() => {
+    timerRef.current = setTimeout(() => navigate('/dashboard', { replace: true }), 4000);
+    return () => clearTimeout(timerRef.current);
+  }, [navigate]);
+
+  const handleGoNow = () => {
+    clearTimeout(timerRef.current);
+    navigate('/dashboard', { replace: true });
+  };
+
+  const features = [
+    { icon: Code2,       label: 'AI Code Review',      color: 'text-primary'    },
+    { icon: TrendingUp,  label: 'Performance Insights', color: 'text-green-500'  },
+    { icon: Zap,         label: 'Instant Feedback',     color: 'text-amber-500'  },
+  ];
 
   return (
-    <>
-      <Helmet><title>Welcome | DevInspectAI</title></Helmet>
-
-      <div className="min-h-screen flex items-center justify-center p-6 bg-background">
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0,  scale: 1    }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="card-glass p-10 rounded-3xl border border-border/30 shadow-2xl text-center max-w-lg w-full"
+      >
+        {/* Logo */}
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="card-glass p-10 rounded-3xl max-w-xl w-full text-center space-y-8"
+          initial={{ scale: 0, rotate: -180 }}
+          animate={{ scale: 1, rotate: 0    }}
+          transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.1 }}
+          className="w-20 h-20 mx-auto mb-6 rounded-3xl gradient-brand flex items-center justify-center shadow-xl shadow-primary/30"
         >
-          {/* Icon */}
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 14, delay: 0.1 }}
-            className="w-20 h-20 mx-auto rounded-3xl gradient-brand flex items-center justify-center shadow-lg shadow-primary/30"
-          >
-            <Sparkles className="w-10 h-10 text-white" />
-          </motion.div>
-
-          {/* Heading */}
-          <div className="space-y-2">
-            <h1 className="text-4xl font-extrabold text-gradient">
-              Welcome, {firstName}!
-            </h1>
-            <p className="text-muted-foreground text-base leading-relaxed">
-              You're all set. Choose a mode to start your AI-powered code review or interview session.
-            </p>
-          </div>
-
-          {/* Feature pills */}
-          <div className="flex flex-wrap justify-center gap-3">
-            {[
-              { icon: Code2,        label: 'Code Analysis'      },
-              { icon: BrainCircuit, label: 'AI Evaluation'      },
-              { icon: Trophy,       label: 'Interview Practice' },
-            ].map(({ icon: Icon, label }) => (
-              <div
-                key={label}
-                className="flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-full text-sm font-semibold text-primary"
-              >
-                <Icon className="w-4 h-4" />
-                {label}
-              </div>
-            ))}
-          </div>
-
-          {/* CTA */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-            <Button
-              onClick={() => navigate('/mode-selection')}
-              className="btn-primary h-12 px-8 text-base font-bold"
-            >
-              Get Started <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-            <Button
-              onClick={() => navigate('/dashboard')}
-              variant="outline"
-              className="h-12 px-8 text-base font-semibold border-border/50 hover:bg-muted/50"
-            >
-              Go to Dashboard
-            </Button>
-          </div>
+          <Sparkles className="w-10 h-10 text-white" />
         </motion.div>
-      </div>
-    </>
+
+        {/* Greeting */}
+        <motion.h1
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0  }}
+          transition={{ delay: 0.2 }}
+          className="text-3xl font-extrabold text-gradient mb-2"
+        >
+          Welcome{currentUser?.name ? `, ${currentUser.name.split(' ')[0]}` : ' back'}! 🎉
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="text-muted-foreground mb-8 text-sm leading-relaxed"
+        >
+          You're successfully signed in to DevInspectAI.<br />
+          Your AI-powered code review platform is ready.
+        </motion.p>
+
+        {/* Feature pills */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0  }}
+          transition={{ delay: 0.4 }}
+          className="flex flex-wrap justify-center gap-3 mb-8"
+        >
+          {features.map(({ icon: Icon, label, color }) => (
+            <div key={label} className="flex items-center gap-2 px-4 py-2 bg-muted/40 rounded-xl border border-border/30 text-sm font-medium">
+              <Icon className={`w-4 h-4 ${color}`} />
+              <span>{label}</span>
+            </div>
+          ))}
+        </motion.div>
+
+        {/* CTA */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0  }}
+          transition={{ delay: 0.5 }}
+          className="space-y-3"
+        >
+          <Button onClick={handleGoNow} className="btn-primary w-full h-12 text-base font-bold rounded-2xl">
+            Go to Dashboard <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Redirecting automatically in a few seconds...
+          </p>
+        </motion.div>
+
+        {/* Progress bar */}
+        <motion.div
+          className="mt-6 h-1 bg-muted/40 rounded-full overflow-hidden"
+        >
+          <motion.div
+            initial={{ width: '100%' }}
+            animate={{ width: '0%' }}
+            transition={{ duration: 4, ease: 'linear' }}
+            className="h-full bg-gradient-to-r from-primary to-purple-500 rounded-full"
+          />
+        </motion.div>
+      </motion.div>
+    </div>
   );
 };
 

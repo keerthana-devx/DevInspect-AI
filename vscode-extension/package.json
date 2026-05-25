@@ -1,0 +1,124 @@
+{
+  "name": "devinspectai",
+  "displayName": "DevInspectAI",
+  "description": "AI-powered code review — bug detection, security analysis, and optimization suggestions powered by DevInspectAI.",
+  "version": "2.0.0",
+  "publisher": "DevInspectAI",
+  "icon": "media/icon.png",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Linters", "Other"],
+  "keywords": ["ai", "code review", "bug detection", "security", "devtools"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "devinspectai.analyzeFile",
+        "title": "Analyze with DevInspectAI",
+        "category": "DevInspectAI",
+        "icon": "$(search)"
+      },
+      {
+        "command": "devinspectai.analyzeSelection",
+        "title": "Analyze Selection with DevInspectAI",
+        "category": "DevInspectAI"
+      },
+      {
+        "command": "devinspectai.verifyToken",
+        "title": "Verify Connection",
+        "category": "DevInspectAI"
+      },
+      {
+        "command": "devinspectai.setMode",
+        "title": "Set Analysis Mode",
+        "category": "DevInspectAI"
+      },
+      {
+        "command": "devinspectai.openPanel",
+        "title": "Open Results Panel",
+        "category": "DevInspectAI"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "devinspectai.analyzeFile",
+          "group": "DevInspectAI@1",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "devinspectai.analyzeSelection",
+          "group": "DevInspectAI@2",
+          "when": "editorHasSelection"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "devinspectai.analyzeFile",
+          "group": "navigation",
+          "when": "editorTextFocus"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "DevInspectAI",
+      "properties": {
+        "devinspectai.apiToken": {
+          "type": "string",
+          "default": "",
+          "description": "Your DevInspectAI extension token. Generate it at Settings → VS Code tab on the DevInspectAI website.",
+          "markdownDescription": "Your DevInspectAI extension token. Generate it at **Settings → VS Code** on the DevInspectAI website."
+        },
+        "devinspectai.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:5000",
+          "description": "DevInspectAI backend URL."
+        },
+        "devinspectai.mode": {
+          "type": "string",
+          "default": "developer",
+          "enum": ["developer", "student", "interviewer"],
+          "enumDescriptions": [
+            "Production-grade review: security, performance, architecture",
+            "Beginner-friendly explanations and learning tips",
+            "FAANG-style interview evaluation with scoring"
+          ],
+          "description": "Analysis mode to use."
+        },
+        "devinspectai.autoAnalyze": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically analyze file on save."
+        },
+        "devinspectai.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show DevInspectAI status in the status bar."
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "devinspectai.analyzeFile",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d",
+        "when": "editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}

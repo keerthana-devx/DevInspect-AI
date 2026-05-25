@@ -17,9 +17,10 @@ import shareRoutes     from './routes/shareRoutes.js';
 import rulesRoutes     from './routes/rulesRoutes.js';
 import extensionRoutes from './routes/extensionRoutes.js';
 import ciRoutes        from './routes/ciRoutes.js';
-import engagementRoutes from './routes/engagementRoutes.js';
-import uploadRoutes     from './routes/uploadRoutes.js';
-import mascotRoutes     from './routes/mascotRoutes.js';
+import engagementRoutes  from './routes/engagementRoutes.js';
+import uploadRoutes      from './routes/uploadRoutes.js';
+import mascotRoutes      from './routes/mascotRoutes.js';
+import interviewRoutes   from './routes/interviewRoutes.js';
 import { protect }     from './middleware/authMiddleware.js';
 import { isAdmin }     from './middleware/roleMiddleware.js';
 
@@ -59,6 +60,7 @@ app.use('/api/test',     testRoutes);
 app.use('/api/ci',          ciRoutes);
 app.use('/api/upload-file', uploadRoutes);
 app.use('/api/mascot',      mascotRoutes);
+app.use('/api/interview',   interviewRoutes);
 
 /* ─── Protected routes ───────────────────────────── */
 app.use('/api/analysis',   analysisLimiter, analysisRoutes);
